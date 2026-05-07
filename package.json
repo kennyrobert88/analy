@@ -1,0 +1,36 @@
+{
+  "name": "analy",
+  "version": "1.0.0",
+  "description": "Email analytics dashboard powered by Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "rebuild": "electron-rebuild --arch arm64",
+    "postinstall": "electron-rebuild --arch arm64"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kennyrobert88/analy.git"
+  },
+  "keywords": [
+    "email",
+    "analytics",
+    "electron"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kennyrobert88/analy/issues"
+  },
+  "homepage": "https://github.com/kennyrobert88/analy#readme",
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "electron": "^42.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "googleapis": "^144.0.0",
+    "sqlite3": "^5.1.7"
+  }
+}

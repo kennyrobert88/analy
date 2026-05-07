@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analy - Email Analytics</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="chart.min.js"></script>
+</head>
+<body>
+  <div class="macos-header"></div>
+
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="workspace">
+        <div class="workspace-icon">A</div>
+        <span>Analy</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-section="dashboard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a href="#" class="nav-item" data-section="senders">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Top Senders
+      </a>
+      <a href="#" class="nav-item" data-section="trends">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Trends
+      </a>
+      <a href="#" class="nav-item" data-section="ai-insights">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6.66z"/></svg>
+        AI Insights
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sync-status">
+        <div class="sync-dot" id="syncDot"></div>
+        <span id="syncStatus">Not connected</span>
+      </div>
+      <button id="logoutBtn" class="logout-btn" style="display: none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </button>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <header class="topbar">
+      <div class="breadcrumbs">
+        <span class="breadcrumb-item">Analy</span>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-item active" id="breadcrumbPage">Dashboard</span>
+      </div>
+      <div class="topbar-actions">
+        <button id="connectBtn" class="btn btn-primary">Connect Gmail</button>
+        <button id="customizeDashboardBtn" class="btn btn-secondary" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z"/><path d="M12 8v8M8 12h8"/></svg>
+          Customize
+        </button>
+        <button id="fetchBtn" class="btn btn-secondary" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Fetch Emails
+        </button>
+        <button id="logoutBtnTop" class="btn btn-logout" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <section id="authSection" class="section">
+        <div class="empty-state">
+          <div class="empty-icon">📧</div>
+          <h1>Connect your Gmail</h1>
+          <p>Sign in with Google to start analyzing your email patterns and get AI-powered insights.</p>
+          <button id="connectBtn2" class="btn btn-primary btn-large">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Connect Gmail
+          </button>
+        </div>
+      </section>
+
+      <section id="dashboardSection" class="section" style="display: none;">
+        <div class="section" id="dashboard">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span class="page-icon">📊</span>
+              Dashboard
+            </h1>
+            <p class="page-description">Your email analytics overview.</p>
+            <div class="stats-overview">
+              <div class="stat-card">
+                <span class="stat-number" id="todayEmails">-</span>
+                <span class="stat-label">Today</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-number" id="totalEmailsDashboard">-</span>
+                <span class="stat-label">Total</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-number" id="uniqueSendersDashboard">-</span>
+                <span class="stat-label">Senders</span>
+              </div>
+            </div>
+            <button id="refreshWidgetsBtn" class="btn btn-secondary" style="margin-left: 16px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/></svg>
+              Refresh Data
+            </button>
+          </div>
+
+          <div class="default-analytics">
+            <div class="analytics-card">
+              <h3>Emails by Hour</h3>
+              <div class="chart-container">
+                <canvas id="defaultHourlyChart"></canvas>
+              </div>
+            </div>
+            <div class="analytics-card">
+              <h3>Emails by Day</h3>
+              <div class="chart-container">
+                <canvas id="defaultDailyChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboardGrid" class="dashboard-grid" style="margin-top: 24px;">
+          </div>
+        </div>
+
+        <div class="section" id="senders" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span class="page-icon">👥</span>
+              Top Senders
+            </h1>
+            <p class="page-description">Who sends you the most emails.</p>
+          </div>
+
+          <div class="database-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Sender</th>
+                  <th>Email Count</th>
+                  <th>Percentage</th>
+                </tr>
+              </thead>
+              <tbody id="sendersTableBody">
+              </tbody>
+            </table>
+          </div>
+
+          <div class="chart-container" style="margin-top: 24px;">
+            <h3>Sender Distribution</h3>
+            <canvas id="topSendersChart"></canvas>
+          </div>
+        </div>
+
+        <div class="section" id="trends" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span class="page-icon">📈</span>
+              Trends & Patterns
+            </h1>
+            <p class="page-description">How your email volume changes over time.</p>
+          </div>
+
+          <div class="insights-list" id="trendsInsights">
+          </div>
+
+          <div class="chart-container">
+            <h3>Email Volume (Last 30 Days)</h3>
+            <canvas id="trendsChart"></canvas>
+          </div>
+        </div>
+
+        <div class="section" id="ai-insights" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title">
+              <span class="page-icon">🧠</span>
+              AI Insights
+            </h1>
+            <p class="page-description">Ask questions about your email patterns.</p>
+          </div>
+
+          <div class="prompt-container">
+            <div class="prompt-input-wrapper">
+              <span class="prompt-icon">/</span>
+              <input type="text" id="promptInput" placeholder="Ask about your emails...">
+              <button id="analyzeBtn" class="btn btn-primary btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+            <div class="prompt-suggestions">
+              <span class="suggestion" data-prompt="Who sends me the most emails?">Top senders</span>
+              <span class="suggestion" data-prompt="How many newsletters do I get?">Newsletter count</span>
+              <span class="suggestion" data-prompt="Show me recent important emails">Recent important</span>
+              <span class="suggestion" data-prompt="What's my email pattern by day of week?">Weekly pattern</span>
+            </div>
+          </div>
+
+          <div id="aiResults" class="ai-results">
+            <div class="ai-empty-state">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6.66z"/></svg>
+              <p>Ask a question to get AI-powered insights about your emails.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Widget Configuration Modal -->
+  <div id="widgetModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Widget</h2>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="widgetTitle">Widget Title</label>
+          <input type="text" id="widgetTitle" placeholder="Enter widget title">
+        </div>
+        <div class="form-group">
+          <label for="widgetType">Chart Type</label>
+          <select id="widgetType">
+            <option value="bar">Bar Chart</option>
+            <option value="line">Line Chart</option>
+            <option value="pie">Pie Chart</option>
+            <option value="doughnut">Doughnut Chart</option>
+            <option value="horizontalBar">Horizontal Bar</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="widgetDataSource">Data Source</label>
+          <select id="widgetDataSource">
+            <option value="emailsByDate">Emails by Date</option>
+            <option value="senders">Top Senders</option>
+            <option value="categories">Email Categories</option>
+            <option value="hourlyDistribution">Hourly Distribution</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="widgetWidth">Width (columns)</label>
+          <select id="widgetWidth">
+            <option value="1">1 Column</option>
+            <option value="2">2 Columns</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="deleteWidgetBtn" class="btn btn-danger" style="display: none;">Delete</button>
+        <div class="modal-footer-right">
+          <button id="cancelWidgetBtn" class="btn btn-secondary">Cancel</button>
+          <button id="saveWidgetBtn" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
