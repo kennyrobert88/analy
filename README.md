@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Analy - Email Analytics
 
 Electron-based email analytics dashboard with Google OAuth2 SSO, SQLite storage, and local AI analysis.
@@ -43,3 +44,7 @@ npm start
 ## Data Flow
 
 Google API → SQLite → Local AI Analysis → Frontend UI
+=======
+# analy
+An email analysis project. 
+>>>>>>> 701db4b78e8587937dcd37d7f03bb18a5568f2ee
