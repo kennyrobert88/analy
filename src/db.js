@@ -59,6 +59,22 @@ async function initDb() {
           config TEXT
         )
       `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS job_applications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_title TEXT NOT NULL,
+          job_id TEXT,
+          company_name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'applied' CHECK(status IN ('applied', 'interview', 'rejected', 'accepted')),
+          location TEXT,
+          date_applied TEXT NOT NULL,
+          notes TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        )
+      `);
+
+      db.run("ALTER TABLE job_applications ADD COLUMN location TEXT", () => {});
     });
 
     db.on('open', () => resolve());
@@ -235,4 +251,58 @@ async function getLatestEmailDate() {
   });
 }
 
-module.exports = { initDb, closeDb, getDb, insertEmail, insertEmails, saveToken, getToken, clearTokens, clearEmails, saveDashboardWidgets, getDashboardWidgets, getLatestEmailDate };
+async function getJobApplications() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM job_applications ORDER BY date_applied DESC', (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
+
+async function addJobApplication(app) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO job_applications (job_title, job_id, company_name, status, location, date_applied, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [app.job_title, app.job_id || null, app.company_name, app.status, app.location || null, app.date_applied, app.notes || null],
+      function (err) {
+        if (err) return reject(err);
+        resolve({ id: this.lastID });
+      }
+    );
+  });
+}
+
+async function updateJobApplication(id, app) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE job_applications SET job_title = ?, job_id = ?, company_name = ?, status = ?, location = ?, date_applied = ?, notes = ? WHERE id = ?`,
+      [app.job_title, app.job_id || null, app.company_name, app.status, app.location || null, app.date_applied, app.notes || null, id],
+      function (err) {
+        if (err) return reject(err);
+        resolve(this.changes > 0);
+      }
+    );
+  });
+}
+
+async function clearJobApplications() {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM job_applications', function (err) {
+      if (err) return reject(err);
+      resolve(this.changes);
+    });
+  });
+}
+
+async function deleteJobApplication(id) {
+  return new Promise((resolve, reject) => {
+    db.run('DELETE FROM job_applications WHERE id = ?', [id], function (err) {
+      if (err) return reject(err);
+      resolve(this.changes > 0);
+    });
+  });
+}
+
+module.exports = { initDb, closeDb, getDb, insertEmail, insertEmails, saveToken, getToken, clearTokens, clearEmails, saveDashboardWidgets, getDashboardWidgets, getLatestEmailDate, getJobApplications, addJobApplication, updateJobApplication, deleteJobApplication, clearJobApplications };

@@ -455,6 +455,10 @@ async function fetchEmails(maxResults = 100, incremental = true) {
       const afterDate = new Date(latestDate + 1);
       const formattedDate = afterDate.toISOString().split('T')[0].replace(/-/g, '/');
       query += ` after:${formattedDate}`;
+    } else {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      const formattedDate = ninetyDaysAgo.toISOString().split('T')[0].replace(/-/g, '/');
+      query += ` after:${formattedDate}`;
     }
   }
 
@@ -472,7 +476,11 @@ async function fetchEmails(maxResults = 100, incremental = true) {
     const messages = listResponse.data.messages || [];
     allMessages = allMessages.concat(messages);
     pageToken = listResponse.data.nextPageToken;
-  } while (pageToken);
+  } while (pageToken && allMessages.length < maxResults);
+
+  if (allMessages.length > maxResults) {
+    allMessages = allMessages.slice(0, maxResults);
+  }
 
   if (allMessages.length === 0) {
     return { count: 0, success: true, message: 'No new emails to fetch' };
@@ -481,12 +489,20 @@ async function fetchEmails(maxResults = 100, incremental = true) {
   const emails = [];
 
   for (const message of allMessages) {
-    const msg = await gmail.users.messages.get({
-      userId: 'me',
-      id: message.id,
-      format: 'metadata',
-      metadataHeaders: ['From', 'To', 'Subject', 'Date'],
-    });
+    let msg;
+    try {
+      msg = await gmail.users.messages.get({
+        userId: 'me',
+        id: message.id,
+        format: 'metadata',
+        metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+      });
+    } catch (err) {
+      if (err.code === 404 || err.message?.includes('not found')) {
+        continue;
+      }
+      throw err;
+    }
 
     const headers = msg.data.payload.headers;
     const from = headers.find((h) => h.name === 'From')?.value || '';

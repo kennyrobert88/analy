@@ -180,4 +180,82 @@ function analyzeWithPrompt(prompt, emails) {
   };
 }
 
-module.exports = { analyzeEmails };
+function analyzeJobApplications(applications) {
+  if (!applications || applications.length === 0) {
+    return {
+      summary: 'No job applications tracked yet.',
+      insights: [],
+      stats: { total: 0, applied: 0, interview: 0, rejected: 0, accepted: 0 },
+    };
+  }
+
+  const total = applications.length;
+  const statuses = { applied: 0, interview: 0, rejected: 0, accepted: 0 };
+  applications.forEach(a => { statuses[a.status]++; });
+
+  const interviewRate = total > 0 ? ((statuses.interview / total) * 100).toFixed(1) : 0;
+  const successRate = total > 0 ? ((statuses.accepted / total) * 100).toFixed(1) : 0;
+
+  const insights = [
+    `You've submitted ${total} job applications total.`,
+    `${statuses.applied} pending, ${statuses.interview} in interview, ${statuses.rejected} rejected, ${statuses.accepted} accepted.`,
+    `Interview rate: ${interviewRate}%`,
+    `Success rate: ${successRate}%`,
+  ];
+
+  if (statuses.interview > 0) {
+    insights.push(`You have ${statuses.interview} active interview${statuses.interview > 1 ? 's' : ''} — keep preparing!`);
+  }
+  if (statuses.rejected > statuses.accepted && statuses.rejected > 3) {
+    insights.push('Rejections are part of the process. Consider reviewing your resume or targeting different roles.');
+  }
+  if (statuses.applied > 5 && statuses.interview === 0) {
+    insights.push('No interviews yet from recent applications. Try tailoring your applications more specifically.');
+  }
+
+  return {
+    summary: `${total} job application${total > 1 ? 's' : ''} tracked. ${statuses.interview} active interview${statuses.interview !== 1 ? 's' : ''}.`,
+    insights,
+    stats: statuses,
+  };
+}
+
+const { classifyJobEmail } = require('./ml');
+
+function classifyJobEmails(emails) {
+  if (!emails || emails.length === 0) return [];
+
+  const results = [];
+
+  emails.forEach(email => {
+    const result = classifyJobEmail(email.subject, email.sender, email.snippet);
+    if (result) {
+      results.push({
+        emailId: email.id,
+        subject: email.subject,
+        sender: email.sender,
+        snippet: email.snippet,
+        date: email.internal_date,
+        category: result.category,
+        confidence: result.confidence,
+        scores: result.scores,
+      });
+    }
+  });
+
+  results.sort((a, b) => b.confidence - a.confidence);
+
+  const seen = new Set();
+  const deduped = [];
+  results.forEach(r => {
+    const key = (r.subject || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(r);
+    }
+  });
+
+  return deduped;
+}
+
+module.exports = { analyzeEmails, analyzeJobApplications, classifyJobEmails };

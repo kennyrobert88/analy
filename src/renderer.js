@@ -1,9 +1,11 @@
 
-let topSendersChart, trendsChart;
+let topSendersChart, trendsChart, defaultHourlyChartInstance, defaultDailyChartInstance;
 let currentSection = 'dashboard';
 let dashboardWidgets = [];
 let widgetCharts = {};
 let editingWidgetId = null;
+let editingJobId = null;
+let jobsCache = [];
 
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof Chart === 'undefined') {
@@ -28,6 +30,14 @@ document.addEventListener('DOMContentLoaded', () => {
       handleAnalyze();
     });
   });
+
+  document.getElementById('addJobBtn').addEventListener('click', openAddJobModal);
+  document.getElementById('scanJobEmailsBtn').addEventListener('click', handleScanJobEmails);
+  document.getElementById('analyzeJobsBtn').addEventListener('click', handleAnalyzeJobs);
+  document.getElementById('saveJobBtn').addEventListener('click', saveJob);
+  document.getElementById('cancelJobBtn').addEventListener('click', closeJobModal);
+  document.getElementById('closeJobModalBtn').addEventListener('click', closeJobModal);
+  document.getElementById('deleteJobBtn').addEventListener('click', deleteJob);
 
   document.getElementById('logoutBtn').addEventListener('click', handleLogout);
   document.getElementById('logoutBtnTop').addEventListener('click', handleLogout);
@@ -59,7 +69,7 @@ function navigateTo(section) {
   const sel = '.nav-item[data-section="' + section + '"]';
   document.querySelector(sel).classList.add('active');
 
-  const sectionIds = ['dashboard', 'senders', 'trends', 'ai-insights'];
+  const sectionIds = ['dashboard', 'senders', 'trends', 'ai-insights', 'jobs'];
   sectionIds.forEach(id => {
     document.getElementById(id).style.display = id === section ? 'block' : 'none';
   });
@@ -68,13 +78,18 @@ function navigateTo(section) {
     'dashboard': 'Dashboard',
     'senders': 'Top Senders',
     'trends': 'Trends',
-    'ai-insights': 'AI Insights'
+    'ai-insights': 'AI Insights',
+    'jobs': 'Job Applications'
   };
   document.getElementById('breadcrumbPage').textContent = titles[section] || 'Dashboard';
   currentSection = section;
 
   document.getElementById('customizeDashboardBtn').style.display =
     section === 'dashboard' ? 'inline-flex' : 'none';
+
+  if (section === 'jobs') {
+    loadJobApplications();
+  }
 }
 
 function openAddWidgetModal() {
@@ -427,12 +442,15 @@ async function loadExistingData() {
 }
 
 function createDefaultCharts(emailsByDate, hourlyData) {
+  if (defaultHourlyChartInstance) { defaultHourlyChartInstance.destroy(); defaultHourlyChartInstance = null; }
+  if (defaultDailyChartInstance) { defaultDailyChartInstance.destroy(); defaultDailyChartInstance = null; }
+
   // Default Hourly Chart
   const hourlyCanvas = document.getElementById('defaultHourlyChart');
   if (hourlyCanvas && hourlyData && hourlyData.length > 0) {
     const hours = Array.from({ length: 24 }, (_, i) => i + ':00');
     const counts = hourlyData.map(d => d.count || 0);
-    new Chart(hourlyCanvas, {
+    defaultHourlyChartInstance = new Chart(hourlyCanvas, {
       type: 'line',
       data: {
         labels: hours,
@@ -464,7 +482,7 @@ function createDefaultCharts(emailsByDate, hourlyData) {
   if (dailyCanvas && emailsByDate && emailsByDate.length > 0) {
     const labels = emailsByDate.map(d => d.date).reverse();
     const counts = emailsByDate.map(d => d.count).reverse();
-    new Chart(dailyCanvas, {
+    defaultDailyChartInstance = new Chart(dailyCanvas, {
       type: 'bar',
       data: {
         labels,
@@ -806,6 +824,9 @@ function resetCharts() {
     delete widgetCharts[id];
   });
 
+  if (defaultHourlyChartInstance) { defaultHourlyChartInstance.destroy(); defaultHourlyChartInstance = null; }
+  if (defaultDailyChartInstance) { defaultDailyChartInstance.destroy(); defaultDailyChartInstance = null; }
+
   if (topSendersChart) {
     topSendersChart.data.labels = [];
     topSendersChart.data.datasets[0].data = [];
@@ -891,5 +912,247 @@ function initializeDefaultWidgets() {
   window.electronAPI.saveDashboardWidgets(dashboardWidgets);
   renderDashboard();
   setTimeout(() => loadAllWidgetData(), 500);
+}
+
+// ── Job Applications ─────────────────────────────
+
+function openAddJobModal() {
+  editingJobId = null;
+  document.getElementById('jobModalTitle').textContent = 'Add Application';
+  document.getElementById('jobTitleInput').value = '';
+  document.getElementById('jobIdInput').value = '';
+  document.getElementById('companyInput').value = '';
+  document.getElementById('locationInput').value = '';
+  document.getElementById('statusInput').value = 'applied';
+  document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+  document.getElementById('notesInput').value = '';
+  document.getElementById('deleteJobBtn').style.display = 'none';
+  document.getElementById('jobModal').style.display = 'flex';
+}
+
+function openEditJobModal(job) {
+  editingJobId = job.id;
+  document.getElementById('jobModalTitle').textContent = 'Edit Application';
+  document.getElementById('jobTitleInput').value = job.job_title;
+  document.getElementById('jobIdInput').value = job.job_id || '';
+  document.getElementById('companyInput').value = job.company_name;
+  document.getElementById('locationInput').value = job.location || '';
+  document.getElementById('statusInput').value = job.status;
+  document.getElementById('dateInput').value = job.date_applied;
+  document.getElementById('notesInput').value = job.notes || '';
+  document.getElementById('deleteJobBtn').style.display = 'inline-flex';
+  document.getElementById('jobModal').style.display = 'flex';
+}
+
+function closeJobModal() {
+  document.getElementById('jobModal').style.display = 'none';
+  editingJobId = null;
+}
+
+async function saveJob() {
+  const jobTitle = document.getElementById('jobTitleInput').value.trim();
+  const company = document.getElementById('companyInput').value.trim();
+  const date = document.getElementById('dateInput').value;
+
+  if (!jobTitle || !company || !date) {
+    alert('Please fill in Job Title, Company Name, and Date Applied.');
+    return;
+  }
+
+  const app = {
+    job_title: jobTitle,
+    job_id: document.getElementById('jobIdInput').value.trim(),
+    company_name: company,
+    location: document.getElementById('locationInput').value.trim(),
+    status: document.getElementById('statusInput').value,
+    date_applied: date,
+    notes: document.getElementById('notesInput').value.trim(),
+  };
+
+  if (editingJobId) {
+    await window.electronAPI.updateJobApplication(editingJobId, app);
+  } else {
+    await window.electronAPI.addJobApplication(app);
+  }
+
+  closeJobModal();
+  loadJobApplications();
+}
+
+async function deleteJob() {
+  if (!editingJobId) return;
+  if (!confirm('Delete this job application?')) return;
+  await window.electronAPI.deleteJobApplication(editingJobId);
+  closeJobModal();
+  loadJobApplications();
+}
+
+async function loadJobApplications() {
+  jobsCache = await window.electronAPI.getJobApplications();
+  renderJobsTable(jobsCache);
+  updateJobsStats(jobsCache);
+}
+
+function renderJobsTable(apps) {
+  const tbody = document.getElementById('jobsTableBody');
+  tbody.innerHTML = '';
+
+  if (apps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:32px;">No applications tracked yet. Add your first one!</td></tr>';
+    return;
+  }
+
+  apps.forEach(job => {
+    const tr = document.createElement('tr');
+    const statusLabels = { applied: 'Applied', interview: 'Interview', rejected: 'Rejected', accepted: 'Accepted' };
+    tr.innerHTML = `
+      <td><strong>${escHtml(job.job_title)}</strong></td>
+      <td style="color:var(--text-secondary);font-size:13px;">${job.job_id ? escHtml(job.job_id) : '—'}</td>
+      <td>${escHtml(job.company_name)}</td>
+      <td style="color:var(--text-secondary);font-size:13px;">${job.location ? escHtml(job.location) : '—'}</td>
+      <td><span class="status-badge status-${job.status}">${statusLabels[job.status] || job.status}</span></td>
+      <td style="color:var(--text-secondary);font-size:13px;">${formatDate(job.date_applied)}</td>
+      <td>
+        <button class="job-action-btn" onclick="editJob(${job.id})">Edit</button>
+        <button class="job-action-btn" onclick="removeJob(${job.id})" style="color:#ef4444;">Delete</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateJobsStats(apps) {
+  const stats = { total: apps.length, applied: 0, interview: 0, rejected: 0, accepted: 0 };
+  apps.forEach(a => { stats[a.status]++; });
+  document.getElementById('jobsTotal').textContent = stats.total;
+  document.getElementById('jobsApplied').textContent = stats.applied;
+  document.getElementById('jobsInterview').textContent = stats.interview;
+  document.getElementById('jobsRejected').textContent = stats.rejected;
+  document.getElementById('jobsAccepted').textContent = stats.accepted;
+}
+
+async function handleAnalyzeJobs() {
+  const analysisDiv = document.getElementById('jobsAnalysis');
+  analysisDiv.style.display = 'block';
+  analysisDiv.innerHTML = '<div class="ai-result loading"><div class="loading-spinner"></div><span>Analyzing your job applications...</span></div>';
+
+  try {
+    const result = await window.electronAPI.analyzeJobApplications();
+    analysisDiv.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'ai-result';
+    header.style.marginBottom = '8px';
+    header.style.fontWeight = '600';
+    header.textContent = result.summary;
+    analysisDiv.appendChild(header);
+
+    result.insights.forEach(insight => {
+      const div = document.createElement('div');
+      div.className = 'ai-result';
+      div.innerHTML = `<span style="margin-right:8px;">📊</span><span>${insight}</span>`;
+      analysisDiv.appendChild(div);
+    });
+  } catch (err) {
+    analysisDiv.innerHTML = `<div class="ai-result"><p class="error">Error: ${err.message}</p></div>`;
+  }
+}
+
+async function handleScanJobEmails() {
+  const container = document.getElementById('jobsScanResults');
+  const body = document.getElementById('scanResultsBody');
+  container.style.display = 'block';
+  body.innerHTML = '<div class="ai-result loading"><div class="loading-spinner"></div><span>Scanning emails for job activity...</span></div>';
+
+  try {
+    const results = await window.electronAPI.scanJobEmails();
+    body.innerHTML = '';
+
+    if (results.length === 0) {
+      body.innerHTML = '<div class="ai-result" style="color:var(--text-tertiary);">No job-related emails detected in your inbox.</div>';
+      return;
+    }
+
+    const catLabels = { application: 'Application', interview: 'Interview', rejection: 'Rejection', offer: 'Offer' };
+    const catColors = { application: '#1a73e8', interview: '#f59e0b', rejection: '#dc2626', offer: '#16a34a' };
+
+    results.forEach(r => {
+      const card = document.createElement('div');
+      card.className = 'ai-result';
+      card.style.marginBottom = '8px';
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${escHtml(r.subject || '(no subject)')}</div>
+            <div style="font-size:13px;color:var(--text-secondary);">${escHtml(r.sender || '')}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <span class="status-badge" style="background:${catColors[r.category]}20;color:${catColors[r.category]};">
+              ${catLabels[r.category] || r.category} (${r.confidence}%)
+            </span>
+            <button class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="addFromScan(${r.emailId})">Add</button>
+          </div>
+        </div>`;
+      body.appendChild(card);
+    });
+  } catch (err) {
+    body.innerHTML = `<div class="ai-result"><p class="error">Error: ${err.message}</p></div>`;
+  }
+}
+
+async function addFromScan(emailId) {
+  const results = await window.electronAPI.scanJobEmails();
+  const match = results.find(r => r.emailId === emailId);
+  if (!match) return;
+
+  // Extract company from sender email
+  const sender = match.sender || '';
+  const domainMatch = sender.match(/@([^>]+)/);
+  const companyName = domainMatch ? domainMatch[1].split('.')[0] : 'Unknown';
+  const companyClean = companyName.charAt(0).toUpperCase() + companyName.slice(1);
+
+  // Map category to status
+  const statusMap = { application: 'applied', interview: 'interview', rejection: 'rejected', offer: 'accepted' };
+  const status = statusMap[match.category] || 'applied';
+
+  // Extract date from internal_date
+  const date = match.date ? new Date(match.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+  // Clean subject as job title
+  const jobTitle = (match.subject || 'Unknown Position').replace(/^(Re:|Fwd:|Thank you|Application|Invitation|Interview|Update)/i, '').trim().substring(0, 100);
+
+  await window.electronAPI.addJobApplication({
+    job_title: jobTitle,
+    job_id: '',
+    company_name: companyClean,
+    location: '',
+    status,
+    date_applied: date,
+    notes: `Auto-detected from email: ${match.subject}`,
+  });
+
+  loadJobApplications();
+  // Refresh scan results
+  handleScanJobEmails();
+}
+
+function editJob(id) {
+  const job = jobsCache.find(a => a.id === id);
+  if (job) openEditJobModal(job);
+}
+
+async function removeJob(id) {
+  if (!confirm('Delete this job application?')) return;
+  await window.electronAPI.deleteJobApplication(id);
+  loadJobApplications();
+}
+
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 

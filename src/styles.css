@@ -948,6 +948,89 @@ body {
   margin-bottom: 24px;
 }
 
+/* Job Applications */
+.jobs-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.jobs-stats {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.jobs-stats .stat-card {
+  flex: 1;
+  min-width: 80px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-applied {
+  background-color: #e8f4fd;
+  color: #1a73e8;
+}
+
+.status-interview {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.status-rejected {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.status-accepted {
+  background-color: #f0fdf4;
+  color: #16a34a;
+}
+
+.job-action-btn {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: background-color 0.15s;
+}
+
+.job-action-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  resize: vertical;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(46, 170, 220, 0.15);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .page-content {

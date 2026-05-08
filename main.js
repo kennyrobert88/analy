@@ -2,9 +2,9 @@ require('dotenv').config();
 const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { initDb, closeDb, clearEmails, saveDashboardWidgets, getDashboardWidgets } = require('./src/db');
+const { initDb, closeDb, clearEmails, saveDashboardWidgets, getDashboardWidgets, getJobApplications, addJobApplication, updateJobApplication, deleteJobApplication, clearJobApplications } = require('./src/db');
 const { initOAuth, startOAuthFlow, fetchEmails, isAuthenticated, logout } = require('./src/oauth');
-const { analyzeEmails } = require('./src/ai');
+const { analyzeEmails, analyzeJobApplications, classifyJobEmails } = require('./src/ai');
 
 let mainWindow;
 
@@ -171,6 +171,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('logout', async () => {
     await logout();
     await clearEmails();
+    await clearJobApplications();
     return { success: true };
   });
 
@@ -181,6 +182,38 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('get-dashboard-widgets', async () => {
     return await getDashboardWidgets();
+  });
+
+  ipcMain.handle('get-job-applications', async () => {
+    return await getJobApplications();
+  });
+
+  ipcMain.handle('add-job-application', async (_event, app) => {
+    return await addJobApplication(app);
+  });
+
+  ipcMain.handle('update-job-application', async (_event, id, app) => {
+    return await updateJobApplication(id, app);
+  });
+
+  ipcMain.handle('delete-job-application', async (_event, id) => {
+    return await deleteJobApplication(id);
+  });
+
+  ipcMain.handle('analyze-job-applications', async () => {
+    const apps = await getJobApplications();
+    return analyzeJobApplications(apps);
+  });
+
+  ipcMain.handle('scan-job-emails', async () => {
+    const db = require('./src/db').getDb();
+    const emails = await new Promise((resolve, reject) => {
+      db.all('SELECT id, subject, sender, snippet, internal_date FROM emails ORDER BY internal_date DESC LIMIT 200', (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      });
+    });
+    return classifyJobEmails(emails);
   });
 
   createWindow();
