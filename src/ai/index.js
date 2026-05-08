@@ -1,3 +1,5 @@
+const { classifyJobEmail } = require('../ml');
+
 async function analyzeEmails(prompt, emails) {
   if (prompt) {
     return analyzeWithPrompt(prompt, emails);
@@ -219,8 +221,6 @@ function analyzeJobApplications(applications) {
     stats: statuses,
   };
 }
-
-const { classifyJobEmail } = require('./ml');
 
 function classifyJobEmails(emails) {
   if (!emails || emails.length === 0) return [];

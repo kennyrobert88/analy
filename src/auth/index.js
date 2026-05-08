@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 const http = require('http');
 const url = require('url');
-const { saveToken, getToken, clearTokens, getLatestEmailDate } = require('./db');
+const { saveToken, getToken, clearTokens, getLatestEmailDate } = require('../db');
 
 let oauth2Client;
 let callbackServer;
@@ -523,7 +523,7 @@ async function fetchEmails(maxResults = 100, incremental = true) {
     });
   }
 
-  const { insertEmails } = require('./db');
+  const { insertEmails } = require('../db');
   await insertEmails(emails);
 
   return { count: emails.length, success: true };

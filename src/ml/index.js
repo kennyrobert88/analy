@@ -268,7 +268,6 @@ function generateTrainingData() {
   return trainingData;
 }
 
-// Train on startup
 const model = new NaiveBayes();
 const trainingData = generateTrainingData();
 trainingData.forEach(d => model.train(d.text, d.label));
