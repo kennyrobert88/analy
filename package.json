@@ -6,8 +6,64 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
     "rebuild": "electron-rebuild --arch arm64",
     "postinstall": "electron-rebuild --arch arm64"
+  },
+  "build": {
+    "appId": "com.analy.app",
+    "productName": "Analy",
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      ".env.example"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "icon": "assets/icon.icns",
+      "title": "Analy ${version}"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
   },
   "repository": {
     "type": "git",
@@ -26,7 +82,8 @@
   "homepage": "https://github.com/kennyrobert88/analy#readme",
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
-    "electron": "^42.0.0"
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

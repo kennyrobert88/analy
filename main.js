@@ -1,17 +1,29 @@
 require('dotenv').config();
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { initDb, closeDb, clearEmails, saveDashboardWidgets, getDashboardWidgets } = require('./src/db');
 const { initOAuth, startOAuthFlow, fetchEmails, isAuthenticated, logout } = require('./src/oauth');
 const { analyzeEmails } = require('./src/ai');
 
 let mainWindow;
 
+function getIconPath() {
+  const icons = {
+    darwin: 'icon.icns',
+    win32: 'icon.ico',
+  };
+  const iconDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'assets')
+    : path.join(__dirname, 'src/img');
+  return path.join(iconDir, icons[process.platform] || 'icon.png');
+}
+
 function createWindow() {
   const windowConfig = {
     width: 1200,
     height: 800,
-    icon: path.join(__dirname, 'src/img/analy_logo.png'),
+    icon: getIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -33,8 +45,12 @@ function createWindow() {
 app.whenReady().then(async () => {
   app.setName('Analy');
 
-  if (process.platform === 'darwin') {
-    app.dock.setIcon(path.join(__dirname, 'src/img/analy_logo.png'));
+  if (!app.isPackaged && process.platform === 'darwin') {
+    const iconPath = path.join(__dirname, 'src/img/icon.png');
+    if (fs.existsSync(iconPath)) {
+      const dockIcon = nativeImage.createFromBuffer(fs.readFileSync(iconPath));
+      app.dock.setIcon(dockIcon);
+    }
   }
 
   await initDb();
