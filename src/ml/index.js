@@ -1,291 +1,982 @@
-function tokenize(text) {
-  return (text || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s@.-]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 1 && !STOP_WORDS.has(t));
-}
+const LogisticRegression = require('natural/lib/natural/classifiers/logistic_regression_classifier');
+const PorterStemmer = require('natural/lib/natural/stemmers/porter_stemmer');
+const { WordTokenizer } = require('natural/lib/natural/tokenizers');
 
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought',
-  'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
-  'into', 'through', 'during', 'before', 'after', 'above', 'below',
-  'between', 'out', 'off', 'over', 'under', 'again', 'further',
-  'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how',
-  'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
-  'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-  'than', 'too', 'very', 'just', 'it', 'its', 'this', 'that', 'these',
-  'those', 'i', 'me', 'my', 'myself', 'we', 'us', 'our', 'ours',
-  'you', 'your', 'yours', 'he', 'him', 'his', 'she', 'her', 'hers',
-  'they', 'them', 'their', 'theirs', 'and', 'but', 'or', 'if', 'while',
-  'about', 'up', 'down', 'get', 'got', 'getting', 'am', 'hi', 'hello',
-  'dear', 'thanks', 'thank', 'pleased', 're', 'fw', 'fwd',
-]);
+const tokenizer = new WordTokenizer();
 
-class NaiveBayes {
-  constructor() {
-    this.categories = ['application', 'interview', 'rejection', 'offer', 'other'];
-    this.priors = {};
-    this.wordCounts = {};
-    this.categoryTotals = {};
-    this.vocabSize = 0;
-    this.totalDocs = 0;
-
-    this.categories.forEach(c => {
-      this.priors[c] = 0;
-      this.wordCounts[c] = {};
-      this.categoryTotals[c] = 0;
-    });
+const customStemmer = {
+  tokenizeAndStem(text) {
+    return tokenizer.tokenize((text || '').toLowerCase())
+      .filter(t => t.length > 2)
+      .map(t => PorterStemmer.stem(t));
   }
+};
 
-  train(text, label) {
-    if (!this.categories.includes(label)) return;
-    const words = tokenize(text);
-    this.totalDocs++;
-    this.priors[label] = (this.priors[label] || 0) + 1;
-    const seen = new Set();
-    words.forEach(w => {
-      if (!seen.has(w)) {
-        seen.add(w);
-        this.wordCounts[label][w] = (this.wordCounts[label][w] || 0) + 1;
-        this.categoryTotals[label]++;
-      }
-      const currentVocab = Object.keys(this.wordCounts).reduce((max, c) =>
-        Math.max(max, Object.keys(this.wordCounts[c]).length), 0);
-      this.vocabSize = Math.max(this.vocabSize, currentVocab);
-    });
-  }
+function createEmailCategoryClassifier() {
+  const c = new LogisticRegression(customStemmer);
 
-  classify(text) {
-    const words = tokenize(text);
-    if (words.length === 0) return { category: 'other', confidence: 0, scores: {} };
-
-    const totalPriors = Object.values(this.priors).reduce((s, v) => s + v, 0);
-    const vocab = Object.keys(this.wordCounts).reduce((set, c) => {
-      Object.keys(this.wordCounts[c]).forEach(w => set.add(w));
-      return set;
-    }, new Set());
-    const V = vocab.size;
-
-    const logScores = {};
-    this.categories.forEach(c => {
-      const prior = Math.log((this.priors[c] || 1) / (totalPriors + this.categories.length));
-      const totalWords = this.categoryTotals[c] || 0;
-      let logProb = prior;
-      words.forEach(w => {
-        const count = this.wordCounts[c][w] || 0;
-        logProb += Math.log((count + 1) / (totalWords + V));
-      });
-      logScores[c] = logProb;
-    });
-
-    const maxLog = Math.max(...Object.values(logScores));
-    const expScores = {};
-    this.categories.forEach(c => {
-      expScores[c] = Math.exp(logScores[c] - maxLog);
-    });
-    const sumExp = Object.values(expScores).reduce((s, v) => s + v, 0);
-    const probs = {};
-    this.categories.forEach(c => {
-      probs[c] = expScores[c] / sumExp;
-    });
-
-    const sorted = Object.entries(probs).sort((a, b) => b[1] - a[1]);
-    const top = sorted[0];
-    const second = sorted[1];
-
-    return {
-      category: top[0],
-      confidence: Math.round(top[1] * 100),
-      scores: probs,
-      margin: top[1] - second[1],
-    };
-  }
-}
-
-function generateTrainingData() {
-  const news = [
-    { text: 'your application has been received at', label: 'application' },
-    { text: 'thank you for applying to the position', label: 'application' },
-    { text: 'we received your application for the role', label: 'application' },
-    { text: 'application submitted successfully', label: 'application' },
-    { text: 'thank you for your application to', label: 'application' },
-    { text: 'resume received for your application', label: 'application' },
-    { text: 'application confirmed for position', label: 'application' },
-    { text: 'candidate profile submitted for review', label: 'application' },
-    { text: 'new application received from', label: 'application' },
-    { text: 'thank you for submitting your resume', label: 'application' },
-    { text: 'we have received your application materials', label: 'application' },
-    { text: 'application status update for', label: 'application' },
-    { text: 'your resume has been received by', label: 'application' },
-    { text: 'application has been processed', label: 'application' },
-    { text: 'confirmation of application receipt', label: 'application' },
-    { text: 'we are reviewing your application for', label: 'application' },
-    { text: 'application for employment received', label: 'application' },
-    { text: 'thank you for your interest in the position', label: 'application' },
-    { text: 'submission received for job posting', label: 'application' },
-    { text: 'your profile has been received', label: 'application' },
-    { text: 'we are excited to confirm your application', label: 'application' },
-    { text: 'you have applied to the following position', label: 'application' },
-    { text: 'application acknowledgement from', label: 'application' },
-    { text: 'resume submitted to company', label: 'application' },
-    { text: 'thank you for applying we will review your qualifications', label: 'application' },
-
-    { text: 'interview invitation for the position', label: 'interview' },
-    { text: 'we would like to invite you to interview', label: 'interview' },
-    { text: 'schedule an interview with our team', label: 'interview' },
-    { text: 'phone screen scheduled for', label: 'interview' },
-    { text: 'you are invited to interview for the role', label: 'interview' },
-    { text: 'technical interview scheduled', label: 'interview' },
-    { text: 'onsite interview confirmation', label: 'interview' },
-    { text: 'virtual interview details for', label: 'interview' },
-    { text: 'interview request from hiring manager', label: 'interview' },
-    { text: 'coding interview scheduled for', label: 'interview' },
-    { text: 'we would like to meet you for an interview', label: 'interview' },
-    { text: 'next steps phone screen invitation', label: 'interview' },
-    { text: 'interview confirmation for position', label: 'interview' },
-    { text: 'come meet the team interview invitation', label: 'interview' },
-    { text: 'schedule a time to interview with', label: 'interview' },
-    { text: 'we would like to schedule a phone interview', label: 'interview' },
-    { text: 'interview scheduling request from', label: 'interview' },
-    { text: 'you have been selected for an interview', label: 'interview' },
-    { text: 'we are impressed with your background interview', label: 'interview' },
-    { text: 'interview availability please pick a time', label: 'interview' },
-    { text: 'technical screen invitation from', label: 'interview' },
-    { text: 'we want to chat with you interview', label: 'interview' },
-    { text: 'invitation to complete coding challenge interview', label: 'interview' },
-    { text: 'behavioral interview scheduled for', label: 'interview' },
-    { text: 'panel interview scheduled date', label: 'interview' },
-
-    { text: 'thank you for your interest we have decided to move forward', label: 'rejection' },
-    { text: 'unfortunately we will not be moving forward', label: 'rejection' },
-    { text: 'after careful consideration we have decided to pursue other candidates', label: 'rejection' },
-    { text: 'update on your application status', label: 'rejection' },
-    { text: 'we regret to inform you that we have decided to move forward', label: 'rejection' },
-    { text: 'not moving forward with your application', label: 'rejection' },
-    { text: 'the position has been filled we cannot consider', label: 'rejection' },
-    { text: 'we decided to move forward with other candidates', label: 'rejection' },
-    { text: 'we will not be moving forward with your candidacy', label: 'rejection' },
-    { text: 'while your background is impressive we have decided', label: 'rejection' },
-    { text: 'we are writing to let you know that we have decided', label: 'rejection' },
-    { text: 'we have chosen to move forward with another candidate', label: 'rejection' },
-    { text: 'unable to offer you a position at this time', label: 'rejection' },
-    { text: 'your application was not selected for further consideration', label: 'rejection' },
-    { text: 'we appreciate your interest but have decided to go in another direction', label: 'rejection' },
-    { text: 'we have decided not to proceed with your application', label: 'rejection' },
-    { text: 'we have filled the position and will not be considering', label: 'rejection' },
-    { text: 'we regret to inform you that your application has not been successful', label: 'rejection' },
-    { text: 'after reviewing your application we have decided', label: 'rejection' },
-    { text: 'unfortunately we have decided to move forward with other applicants', label: 'rejection' },
-    { text: 'we have decided to pursue other candidates for this role', label: 'rejection' },
-    { text: 'your candidacy will not be moving forward', label: 'rejection' },
-    { text: 'while we were impressed by your qualifications we have chosen', label: 'rejection' },
-    { text: 'we have decided to close the position', label: 'rejection' },
-    { text: 'thank you for your time but we have decided', label: 'rejection' },
-    { text: 'thank you for your interest in the position unfortunately we have decided', label: 'rejection' },
-    { text: 'thank you for your interest update on your application status we have decided', label: 'rejection' },
-    { text: 'we appreciate your interest in the role but have chosen to move forward', label: 'rejection' },
-    { text: 'thank you for your application we regret to inform you', label: 'rejection' },
-    { text: 'your application at company status update we have decided', label: 'rejection' },
-    { text: 'application status update we have decided not to proceed', label: 'rejection' },
-    { text: 'we appreciate your interest in the position unfortunately we will not', label: 'rejection' },
-
-    { text: 'job offer for the position of', label: 'offer' },
-    { text: 'we are pleased to offer you the position', label: 'offer' },
-    { text: 'offer letter attached for your review', label: 'offer' },
-    { text: 'congratulations we are excited to offer you', label: 'offer' },
-    { text: 'compensation details for your new role', label: 'offer' },
-    { text: 'welcome to the team employment offer', label: 'offer' },
-    { text: 'formal offer of employment from', label: 'offer' },
-    { text: 'we are delighted to extend an offer', label: 'offer' },
-    { text: 'offer package details for your review', label: 'offer' },
-    { text: 'employment offer agreement enclosed', label: 'offer' },
-    { text: 'congratulations on your new position offer', label: 'offer' },
-    { text: 'start date and compensation details', label: 'offer' },
-    { text: 'we would like to welcome you to the team offer', label: 'offer' },
-    { text: 'offer of employment terms and conditions', label: 'offer' },
-    { text: 'you have been selected for the position offer', label: 'offer' },
-    { text: 'pleased to inform you that we are offering', label: 'offer' },
-    { text: 'acceptance of your offer of employment', label: 'offer' },
-    { text: 'salary offer and benefits package', label: 'offer' },
-    { text: 'we are happy to extend this offer of employment', label: 'offer' },
-    { text: 'offer details compensation start date', label: 'offer' },
-    { text: 'congratulations you have been selected for the role', label: 'offer' },
-    { text: 'equity compensation offer details', label: 'offer' },
-    { text: 'welcome aboard employment offer letter', label: 'offer' },
-    { text: 'offer acceptance deadline information', label: 'offer' },
-    { text: 'we look forward to welcoming you to the team offer', label: 'offer' },
-
-    { text: 'your monthly newsletter is ready', label: 'other' },
-    { text: 'password reset request for your account', label: 'other' },
-    { text: 'you have a new notification from', label: 'other' },
-    { text: 'weekly digest of your activity', label: 'other' },
-    { text: 'your bill is ready for this month', label: 'other' },
-    { text: 'new login from unknown device', label: 'other' },
-    { text: 'please update your payment information', label: 'other' },
-    { text: 'your order has been shipped', label: 'other' },
-    { text: 'new message from your connection', label: 'other' },
-    { text: 'security alert for your account', label: 'other' },
-    { text: 'your subscription is expiring soon', label: 'other' },
-    { text: 'someone liked your post', label: 'other' },
-    { text: 'weekly report is now available', label: 'other' },
-    { text: 'please verify your email address', label: 'other' },
-    { text: 'your account has been updated', label: 'other' },
-    { text: 'new comment on your article', label: 'other' },
-    { text: 'your package has been delivered', label: 'other' },
-    { text: 'two factor authentication code', label: 'other' },
-    { text: 'receipt for your recent purchase', label: 'other' },
-    { text: 'you have been mentioned in a post', label: 'other' },
-    { text: 'renew your subscription now', label: 'other' },
-    { text: 'new event invitation from', label: 'other' },
-    { text: 'your refund has been processed', label: 'other' },
-    { text: 'changes to our terms of service', label: 'other' },
-    { text: 'your support ticket has been updated', label: 'other' },
-    { text: 'application has crashed error report', label: 'other' },
-    { text: 'status update your server is running', label: 'other' },
-    { text: 'your application version has been updated to', label: 'other' },
-    { text: 'status of your order has been updated', label: 'other' },
-    { text: 'new app version available for download', label: 'other' },
+  const newsletter = [
+    'your monthly newsletter is ready',
+    'weekly digest of top stories',
+    'this week in tech newsletter',
+    'your subscription newsletter',
+    "this month's highlights newsletter",
+    'newsletter issue number',
+    'substack newsletter update',
+    'check out our latest newsletter',
+    'new blog posts this month',
+    'stay informed with our newsletter',
+    "february's newsletter is here",
+    'the weekly roundup newsletter',
+    'your personalized newsletter',
+    'noreply@mailchimp.com newsletter',
+    'noreply@substack.com your update',
+    'newsletter from noreply@convertkit.com',
+    'noreply@sendgrid.com weekly digest',
+    'no-reply@medium.com your daily digest',
+    'noreply@wordpress.com new posts',
+    'noreply@shopify.com monthly update',
+    'noreply@mail.beehiiv.com newsletter',
+    'noreply@buttondown.com edition',
+    'newsletter weekly top picks',
+    'curated newsletter just for you',
+    'the morning newsletter briefing',
+    'your daily newsletter is ready',
+    'this week in AI newsletter',
+    'weekend edition newsletter',
+    'sunday reading newsletter',
+    'your newsletter preferences have been updated',
+    'noreply@ghost.org newsletter post',
+    'noreply@revue.com your newsletter',
+    'noreply@campaignmonitor.com campaign',
+    'noreply@constantcontact.com newsletter',
+    'no-reply@getresponse.com mailing',
+    'noreply@aweber.com newsletter',
+    'noreply@activecampaign.com update',
+    'noreply@sendinblue.com campaign',
+    'noreply@hubspot.com marketing email',
+    'noreply@mailerlite.com newsletter',
+    'no-reply@omnisend.com newsletter',
+    'noreply@klaviyo.com email',
+    'noreply@emarsys.com newsletter',
+    'noreply@dotdigital.com campaign',
+    'no-reply@braze.com newsletter',
+    'noreply@iterable.com campaign',
+    'noreply@customer.io newsletter',
+    'noreply@sparkpost.com email',
+    'noreply@postmarkapp.com newsletter',
+    'noreply@amazonses.com newsletter',
   ];
 
-  const senders = [
-    'noreply@lever.co', 'careers@greenhouse.io', 'jobs@workable.com',
-    'apply@bamboohr.com', 'notifications@linkedin.com', 'alerts@indeed.com',
-    'careers@acmecorp.com', 'jobs@techstartup.io', 'recruiting@bigcompany.com',
-    'hr@company.com', 'talent@startup.com', 'careers@enterprise.com',
-    'noreply@mail.google.com', 'updates@newsletter.com', 'alert@notify.com',
-    'support@shop.com', 'info@service.com', 'team@platform.com',
+  const notification = [
+    'password reset request for your account',
+    'security alert new sign in detected',
+    'your verification code is',
+    'two factor authentication code',
+    'new login from unknown device',
+    'security alert for your account',
+    'please verify your email address',
+    'your account has been updated',
+    'changes to our terms of service',
+    'your support ticket has been updated',
+    'new device signed in to your account',
+    'account recovery request',
+    'unusual sign in attempt detected',
+    'your password has been changed',
+    'we detected a new login',
+    'confirm your email address',
+    'email verification required',
+    'account notification from',
+    'alert security breach detected',
+    'suspicious activity on your account',
+    'recovery email sent to your inbox',
+    'please confirm your account',
+    'your account will be deactivated',
+    'billing notification invoice ready',
+    'payment method expiring soon',
+    'subscription renewal notice',
+    'your invoice is ready for payment',
+    'new bill available for payment',
+    'noreply@github.com security alert',
+    'noreply@google.com security alert',
+    'noreply@apple.com account alert',
+    'noreply@microsoft.com account notification',
+    'noreply@facebook.com security notification',
+    'noreply@twitter.com account alert',
+    'noreply@linkedin.com security alert',
+    'no-reply@slack.com notification',
+    'noreply@dropbox.com security',
+    'noreply@aws.amazon.com alert',
+    'noreply@heroku.com notification',
+    'noreply@digitalocean.com alert',
+    'noreply@stripe.com payment notification',
+    'noreply@notion.com account update',
+    'noreply@figma.com notification',
+    'noreply@atlassian.com alert',
+    'noreply@vercel.com deployment notification',
+    'noreply@netlify.com build notification',
+    'noreply@cloudflare.com alert',
+    'no-reply@mongodb.com atlas alert',
+    'noreply@datadog.com monitor alert',
+    'noreply@github.com password reset request',
+    'noreply@google.com password reset link',
+    'noreply@apple.com account password reset',
+    'noreply@microsoft.com password change notification',
+    'noreply@facebook.com password reset request',
+    'noreply@twitter.com password reset confirmation',
+    'noreply@amazon.com password change alert',
+    'noreply@dropbox.com password reset email',
+    'noreply@slack.com password reset notification',
+    'noreply@stripe.com security notification',
+    'noreply@heroku.com password reset',
+    'noreply@digitalocean.com account recovery',
+    'noreply@vercel.com account security alert',
+    'noreply@notion.so login from new device',
+    'no-reply@cloudflare.com authentication code',
   ];
 
-  const trainingData = [];
-  news.forEach(n => {
-    senders.slice(0, 6).forEach(s => {
-      trainingData.push({ text: `${n.text} ${s.split('@')[1] || ''} ${s}`, label: n.label });
-    });
+  const personal = [
+    'hey how are you doing lately',
+    'catch up this weekend',
+    'thanks for the email yesterday',
+    'great to hear from you',
+    'thinking of you hope all is well',
+    'happy birthday to you',
+    'can we meet for coffee',
+    'how was your trip',
+    'long time no see',
+    'just checking in on you',
+    'hope you are doing well',
+    'thanks for your help yesterday',
+    'it was great seeing you',
+    'let me know when you are free',
+    'are you free for dinner',
+    'happy holidays from our family',
+    'welcome to the neighborhood',
+    'thank you for the gift',
+    'miss you hope we can catch up soon',
+    'sending you best wishes',
+    'personal message just for you',
+    'what do you think about this',
+    'let me know your thoughts',
+    'hello from your cousin',
+    'dad sent me your email',
+    'your mom asked me to forward this',
+    'friend request accepted',
+    'invitation to my wedding',
+    'family reunion details',
+    'thank you for the wonderful evening',
+    'person@gmail.com hey there',
+    'friend@yahoo.com how are you',
+    'contact@outlook.com hello again',
+    'family@gmail.com reunion',
+    'name@gmail.com catch up',
+    'hello@yahoo.com dinner plans',
+    'personal@gmail.com weekend',
+    'bff@outlook.com life update',
+    'buddy@gmail.com thanks',
+    'sibling@yahoo.com family news',
+  ];
+
+  const work = [
+    'meeting scheduled for tomorrow',
+    'project update sprint review',
+    'your timesheet has been approved',
+    'quarterly review meeting agenda',
+    'standup notes for today',
+    'action items from our meeting',
+    'invitation quarterly planning session',
+    'client meeting scheduled this week',
+    'sprint retrospective notes',
+    'team standup meeting link',
+    'agenda for weekly sync',
+    'project milestone update',
+    'performance review scheduled',
+    'onboarding tasks for new hire',
+    'expense report approved',
+    'your pto request has been approved',
+    'new company policy update',
+    'team building event invitation',
+    'board meeting materials attached',
+    'contract renewal terms attached',
+    'meeting@company.com calendar invite',
+    'noreply@calendly.com meeting scheduled',
+    'zoom@zoom.us meeting invitation',
+    'notify@outlook.com meeting reminder',
+    'noreply@google.com calendar event',
+    'noreply@teams.microsoft.com meeting',
+    'talent@acmecorp.com recruiting update',
+    'hr@companycorp.com benefits update',
+    'careers@entreprise.com interview',
+    'recruiting@bigco.com candidate status',
+    'noreply@workday.com time off approved',
+    'noreply@bamboohr.com payroll',
+    'notifications@slack.com workspace',
+    'noreply@asana.com task assigned',
+    'noreply@trello.com board update',
+    'notifications@jira.com ticket assigned',
+    'noreply@linear.app issue created',
+    'noreply@notion.so shared workspace',
+    'noreply@miro.com board invitation',
+    'noreply@figma.com design review',
+    'noreply@github.com pull request',
+    'noreply@gitlab.com merge request',
+    'noreply@bitbucket.org pipeline',
+    'noreply@circleci.com build notification',
+    'noreply@jenkins.io build complete',
+  ];
+
+  const other = [
+    'your order has been shipped',
+    'receipt for your recent purchase',
+    'your package has been delivered',
+    'new comment on your article',
+    'your support ticket has been updated',
+    'application has crashed error report',
+    'your subscription is expiring soon',
+    'someone liked your post',
+    'weekly report is now available',
+    'please update your payment information',
+    'your refund has been processed',
+    'new event invitation from',
+    'your app version has been updated to',
+    'status of your order has been updated',
+    'new app version available for download',
+    'your bill is ready for this month',
+    'new message from your connection',
+    'you have been mentioned in a post',
+    'renew your subscription now',
+    'your monthly statement is ready',
+    'noreply@amazon.com your order confirmation',
+    'ship-confirm@ups.com package tracking',
+    'noreply@fedex.com delivery update',
+    'auto-reply@usps.com package status',
+    'noreply@shopify.com order confirmation',
+    'noreply@ebay.com you have a question',
+    'noreply@etsy.com purchase receipt',
+    'noreply@bestbuy.com order status',
+    'noreply@walmart.com delivery update',
+    'noreply@target.com order shipped',
+    'noreply@spotify.com your playlist',
+    'noreply@netflix.com new releases',
+    'noreply@hulu.com subscription',
+    'noreply@disneyplus.com new content',
+    'noreply@airbnb.com booking confirmation',
+    'noreply@uber.com trip receipt',
+    'noreply@doordash.com order delivered',
+    'noreply@grubhub.com your order is ready',
+    'noreply@postmates.com delivery',
+    'noreply@instacart.com your order',
+  ];
+
+  Object.entries({ newsletter, notification, personal, work, other }).forEach(([label, texts]) => {
+    texts.forEach(t => c.addDocument(t, label));
   });
-  return trainingData;
+
+  c.train();
+  return c;
 }
 
-const model = new NaiveBayes();
-const trainingData = generateTrainingData();
-trainingData.forEach(d => model.train(d.text, d.label));
+function createIntentClassifier() {
+  const c = new LogisticRegression(customStemmer);
+
+  const top_sender = [
+    'who emails me the most',
+    'top senders in my inbox',
+    'who sends me the most email',
+    'most frequent email sender',
+    'who emails me most frequently',
+    'list my top email senders',
+    'top email senders',
+    'who sends the most emails',
+    'most common senders',
+    'show me my top senders',
+    'who emails me the most often',
+    'top 10 senders',
+    'who are my top senders',
+    'frequent email contacts',
+    'people who email me most',
+    'most active senders',
+    'top contacts by email count',
+    'who contacts me the most',
+    'list senders by email count',
+    'my most common email contacts',
+    'which sender emails me the most',
+    'top email contacts',
+    'sender frequency ranking',
+    'most email from which person',
+    'rank my email senders',
+    'find top email senders',
+    'who are the top emailers',
+    'show top contacts',
+    'top emailers this month',
+    'frequent email correspondents',
+    'which person sends me the most email',
+    'who contacts me the most often',
+    'show me my contacts by email frequency',
+    'list senders ranked by email volume',
+    'who writes to me most frequently',
+    'sender who emails the most',
+    'people i get email from most often',
+    'list my contacts sorted by email count',
+    'who are the people emailing me',
+    'show senders ordered by email count',
+    'find which sender is most frequent',
+    'my top correspondents by email',
+    'which contact sends the most messages',
+    'tell me who emails me',
+    'sender with the most messages',
+    'who is emailing me the most',
+    'list who sends me email',
+    'my most frequent email contacts',
+    'show my email contacts sorted',
+    'rank contacts by how much they email',
+    'who are my most common emailers',
+    'sender frequency list',
+    'email volume per sender',
+    'which account emails me most',
+    'tell me the names of people who email me',
+    'give me a list of my contacts',
+    'show my contact list',
+    'list the people in my inbox',
+    'who wrote to me',
+    'people who sent me mail',
+  ];
+
+  const newsletter = [
+    'how many newsletters do i have',
+    'count my newsletters',
+    'show me my newsletters',
+    'how many newsletter emails',
+    'list my newsletter subscriptions',
+    'newsletter count in my inbox',
+    'how many newsletters have i received',
+    'show newsletter emails',
+    'tell me about my newsletters',
+    'what newsletters am i subscribed to',
+    'how many subscriptions',
+    'newsletter statistics',
+    'total newsletter emails',
+    'filter newsletter emails',
+    'find newsletters in my inbox',
+    'percentage of newsletters',
+    'newsletter breakdown',
+    'how many marketing emails',
+    'number of newsletter subscriptions',
+    'show promotional emails',
+    'how many promotional emails',
+    'subscription count in emails',
+    'newsletter frequency',
+    'what newsletters do i get',
+    'list all newsletters',
+    'email newsletters count',
+    'newsletter subscription list',
+    'show subscribed newsletters',
+    'how many mailing lists',
+    'how many notifications',
+    'how many personal emails',
+    'how many work emails',
+    'count of notifications',
+    'newsletter analysis',
+  ];
+
+  const important = [
+    'show important emails',
+    'important emails in my inbox',
+    'how many important emails',
+    'list unread emails',
+    'show unread messages',
+    'how many unread emails',
+    'find important messages',
+    'marked as important emails',
+    'show starred emails',
+    'how many flagged emails',
+    'urgent emails',
+    'high priority emails',
+    'show priority messages',
+    'important flagged emails',
+    'list important messages',
+    'count important emails',
+    'unread message count',
+    'show me unread mail',
+    'how many emails are important',
+    'find important mail',
+    'flagged messages in inbox',
+    'show important messages',
+    'urgent messages list',
+    'priority inbox emails',
+    'how many unread messages',
+    'list unread important emails',
+    'count flagged emails',
+    'show me important mail',
+    'important and flagged',
+    'high importance emails',
+  ];
+
+  const recent = [
+    'show recent emails',
+    'latest emails in my inbox',
+    'most recent messages',
+    'show me the latest emails',
+    'recent email activity',
+    'newest emails first',
+    'list recent emails',
+    'show last 10 emails',
+    'recent messages from today',
+    'what are my latest emails',
+    'latest email activity',
+    'show new emails',
+    'recent inbox messages',
+    'new messages received',
+    'what emails arrived recently',
+    'last few emails',
+    'show emails from today',
+    'recently received emails',
+    'newest messages in inbox',
+    'today email activity',
+    'what came in recently',
+    'latest email notifications',
+    'recent email thread',
+    'show me new mail',
+    'most recent messages received',
+    'display latest emails',
+    'recent unread emails',
+    'new messages today',
+    'emails from this week',
+    'recently arrived emails',
+  ];
+
+  const pattern = [
+    'show email patterns by day',
+    'weekly email distribution',
+    'when do i get the most emails',
+    'email volume by day of week',
+    'what day do i get most emails',
+    'email patterns over time',
+    'busiest day for emails',
+    'email activity patterns',
+    'daily email distribution',
+    'day of week email breakdown',
+    'what time do i get emails',
+    'email timing patterns',
+    'when do people email me',
+    'email volume trends',
+    'weekly email analysis',
+    'do i get more emails on mondays',
+    'email pattern analysis',
+    'email distribution by weekday',
+    'show email timing trends',
+    'peak email times',
+    'most active email days',
+    'email volume by weekday',
+    'what days are busiest for email',
+    'hourly email distribution',
+    'show when i get emails',
+    'email traffic patterns',
+    'weekly email trends chart',
+    'email frequency by day',
+    'busiest email day of week',
+    'daily email volume analysis',
+  ];
+
+  const category = [
+    'show email categories',
+    'breakdown by email category',
+    'email types in my inbox',
+    'how many personal emails',
+    'how many work emails',
+    'category breakdown of emails',
+    'what categories are my emails',
+    'email classification breakdown',
+    'show category distribution',
+    'work vs personal email count',
+    'notification email count',
+    'email category statistics',
+    'types of emails i receive',
+    'categorize my emails',
+    'show email type breakdown',
+    'email category distribution',
+    'how many emails are work related',
+    'how many personal messages',
+    'notification email breakdown',
+    'newsletter vs personal vs work',
+    'email categories count',
+    'inbox composition by type',
+    'what kind of emails do i get',
+    'category analysis of my emails',
+    'email categorization results',
+    'show me email types',
+    'breakdown of inbox categories',
+    'categories of emails received',
+    'email classification results',
+    'inbox category distribution',
+  ];
+
+  const general = [
+    'analyze my emails',
+    'tell me about my emails',
+    'email insights',
+    'show me email analysis',
+    'what can you tell me about my emails',
+    'summarize my inbox',
+    'email overview analysis',
+    'analyze my inbox',
+    'give me email statistics',
+    'what do my emails look like',
+    'email summary',
+    'help me understand my emails',
+    'show email insights',
+    'inbox analysis',
+    'email intelligence',
+    'tell me something interesting about my emails',
+    'analyze my email data',
+    'email data analysis',
+    'inbox summary',
+    'what is in my inbox',
+    'email trends',
+    'give me an overview of my emails',
+    'how are my emails looking',
+    'inbox statistics',
+    'analyze my messages',
+    'show me my inbox overview',
+    'what can i learn from my emails',
+    'my email statistics',
+    'email dashboard insights',
+    'inbox intelligence report',
+    'what can i learn from my inbox',
+    'email information for me',
+    'show my inbox data',
+    'information about my emails',
+    'what is happening in my inbox',
+    'give me my email summary',
+    'tell me about my inbox',
+    'what do you know about my emails',
+    'show me my email activity',
+    'view my email insights',
+    'display email information',
+    'what is there to know',
+    'tell me something about my emails',
+    'i want to know about my inbox',
+    'email report for me',
+    'show my mail summary',
+    'what is interesting about my email',
+    'i want email statistics',
+    'give me info about my emails',
+    'email status report',
+    'what are my email numbers',
+    'tell me about my mail',
+    'i want to see my email insights',
+    'show me interesting email facts',
+    'what information do you have',
+    'email data overview',
+    'inbox information',
+    'i want email analysis',
+    'how am i doing with my emails',
+    'how am i doing today',
+    'how are my emails looking',
+    'how is my email activity',
+    'hello there tell me about my emails',
+    'what is up with my inbox',
+    'how is everything in my inbox',
+    'give me the big picture on my emails',
+    'i want to know everything about my emails',
+    'what is the state of my inbox',
+    'tell me how my inbox is doing',
+    'run a full email analysis',
+    'generate email report',
+    'complete email overview',
+    'full inbox analysis report',
+    'give me the full picture',
+    'show full email breakdown',
+    'i want the complete email analysis',
+  ];
+
+  Object.entries({ top_sender, newsletter, important, recent, pattern, category, general }).forEach(([label, texts]) => {
+    texts.forEach(t => c.addDocument(t, label));
+  });
+
+  c.train();
+  return c;
+}
+
+function createJobEmailClassifier() {
+  const c = new LogisticRegression(customStemmer);
+
+  const application = [
+    'your application has been received at noreply@lever.co',
+    'thank you for applying to the position careers@greenhouse.io',
+    'we received your application for the role jobs@workable.com',
+    'application submitted successfully apply@bamboohr.com',
+    'thank you for your application to notifications@linkedin.com',
+    'resume received for your application alerts@indeed.com',
+    'application confirmed for position careers@acmecorp.com',
+    'candidate profile submitted for review jobs@techstartup.io',
+    'new application received from recruiting@bigcompany.com',
+    'thank you for submitting your resume hr@company.com',
+    'we have received your application materials talent@startup.com',
+    'application status update for careers@enterprise.com',
+    'your resume has been received by apply@greenhouse.io',
+    'application has been processed noreply@lever.co',
+    'confirmation of application receipt jobs@workable.com',
+    'we are reviewing your application for apply@bamboohr.com',
+    'application for employment received alerts@indeed.com',
+    'thank you for your interest in the position notifications@linkedin.com',
+    'submission received for job posting careers@acmecorp.com',
+    'your profile has been received hr@company.com',
+    'we are excited to confirm your application jobs@techstartup.io',
+    'you have applied to the following position recruiting@bigcompany.com',
+    'application acknowledgement from talent@startup.com',
+    'resume submitted to company careers@enterprise.com',
+    'thank you for applying we will review your qualifications noreply@lever.co',
+    'application confirmation careers@greenhouse.io',
+    'thank you for your job application apply@bamboohr.com',
+    'job application received alerts@indeed.com',
+    'application submission confirmation notifications@linkedin.com',
+    'your candidacy has been received careers@acmecorp.com',
+    'application for position received apply@greenhouse.io',
+    'thank you we received your resume noreply@lever.co',
+    'new job application received jobs@workable.com',
+    'application submitted to company hr@company.com',
+    'job application confirmation number recruiting@bigcompany.com',
+    'your resume has been submitted alerts@indeed.com',
+    'application received for hr@company.com',
+    'thank you for applying to our company notifications@linkedin.com',
+    'job application successfully submitted careers@acmecorp.com',
+    'application confirmation details jobs@techstartup.io',
+    'we are processing your application noreply@lever.co',
+    'your job application status careers@greenhouse.io',
+    'application received confirmation apply@bamboohr.com',
+    'thank you for your submission alerts@indeed.com',
+    'your application is under review notifications@linkedin.com',
+    'application acknowledgement noreply@lever.co',
+    'candidate application received jobs@workable.com',
+    'job application receipt confirmation hr@company.com',
+    'applied for position confirmation recruiting@bigcompany.com',
+    'application tracking number careers@enterprise.com',
+  ];
+
+  const interview = [
+    'interview invitation for the position noreply@lever.co',
+    'we would like to invite you to interview careers@greenhouse.io',
+    'schedule an interview with our team jobs@workable.com',
+    'phone screen scheduled for apply@bamboohr.com',
+    'you are invited to interview for the role notifications@linkedin.com',
+    'technical interview scheduled alerts@indeed.com',
+    'onsite interview confirmation careers@acmecorp.com',
+    'virtual interview details for jobs@techstartup.io',
+    'interview request from hiring manager recruiting@bigcompany.com',
+    'coding interview scheduled for hr@company.com',
+    'we would like to meet you for an interview talent@startup.com',
+    'next steps phone screen invitation careers@enterprise.com',
+    'interview confirmation for position noreply@lever.co',
+    'come meet the team interview invitation apply@greenhouse.io',
+    'schedule a time to interview with jobs@workable.com',
+    'we would like to schedule a phone interview apply@bamboohr.com',
+    'interview scheduling request from alerts@indeed.com',
+    'you have been selected for an interview notifications@linkedin.com',
+    'we are impressed with your background interview careers@acmecorp.com',
+    'interview availability please pick a time jobs@techstartup.io',
+    'technical screen invitation from recruiting@bigcompany.com',
+    'we want to chat with you interview hr@company.com',
+    'invitation to complete coding challenge interview talent@startup.com',
+    'behavioral interview scheduled for careers@enterprise.com',
+    'panel interview scheduled date noreply@lever.co',
+    'interview invitation please confirm apply@greenhouse.io',
+    'phone interview scheduled for jobs@workable.com',
+    'video interview link for your interview apply@bamboohr.com',
+    'hiring manager interview scheduled alerts@indeed.com',
+    'onsite visit interview details notifications@linkedin.com',
+    'interview invite for position careers@acmecorp.com',
+    'we want to interview you jobs@techstartup.io',
+    'first round interview scheduled recruiting@bigcompany.com',
+    'second round interview details hr@company.com',
+    'final round interview invitation noreply@lever.co',
+    'interview day schedule apply@greenhouse.io',
+    'technical phone screen interview jobs@workable.com',
+    'team interview scheduled apply@bamboohr.com',
+    'interview preparation instructions alerts@indeed.com',
+    'case interview invitation notifications@linkedin.com',
+    'interview confirmation details noreply@lever.co',
+    'coding challenge interview invitation careers@greenhouse.io',
+    'take home assignment interview jobs@workable.com',
+    'next steps interview process apply@bamboohr.com',
+    'we are excited to meet you interview alerts@indeed.com',
+    'please schedule your interview notifications@linkedin.com',
+    'interview booked for careers@acmecorp.com',
+    'virtual onsite interview details jobs@techstartup.io',
+    'hiring process next steps interview recruiting@bigcompany.com',
+    'interview time slot selection hr@company.com',
+  ];
+
+  const rejection = [
+    'thank you for your interest we have decided to move forward noreply@lever.co',
+    'unfortunately we will not be moving forward careers@greenhouse.io',
+    'after careful consideration we have decided to pursue other candidates jobs@workable.com',
+    'update on your application status apply@bamboohr.com',
+    'we regret to inform you that we have decided to move forward notifications@linkedin.com',
+    'not moving forward with your application alerts@indeed.com',
+    'the position has been filled we cannot consider careers@acmecorp.com',
+    'we decided to move forward with other candidates jobs@techstartup.io',
+    'we will not be moving forward with your candidacy recruiting@bigcompany.com',
+    'while your background is impressive we have decided hr@company.com',
+    'we are writing to let you know that we have decided talent@startup.com',
+    'we have chosen to move forward with another candidate careers@enterprise.com',
+    'unable to offer you a position at this time noreply@lever.co',
+    'your application was not selected for further consideration apply@greenhouse.io',
+    'we appreciate your interest but have decided to go in another direction jobs@workable.com',
+    'we have decided not to proceed with your application apply@bamboohr.com',
+    'we have filled the position and will not be considering alerts@indeed.com',
+    'we regret to inform you that your application has not been successful notifications@linkedin.com',
+    'after reviewing your application we have decided careers@acmecorp.com',
+    'unfortunately we have decided to move forward with other applicants jobs@techstartup.io',
+    'we have decided to pursue other candidates for this role recruiting@bigcompany.com',
+    'your candidacy will not be moving forward hr@company.com',
+    'while we were impressed by your qualifications we have chosen talent@startup.com',
+    'we have decided to close the position careers@enterprise.com',
+    'thank you for your time but we have decided noreply@lever.co',
+    'thank you for your interest in the position unfortunately apply@greenhouse.io',
+    'thank you for your interest update on your application status jobs@workable.com',
+    'we appreciate your interest in the role but have chosen to move forward apply@bamboohr.com',
+    'thank you for your application we regret to inform you alerts@indeed.com',
+    'your application at company status update we have decided notifications@linkedin.com',
+    'application status update we have decided not to proceed careers@acmecorp.com',
+    'we appreciate your interest in the position unfortunately we will not jobs@techstartup.io',
+    'regret to inform you application not successful recruiting@bigcompany.com',
+    'update regarding your application status hr@company.com',
+    'thank you for applying but we have decided talent@startup.com',
+    'not selected for the position noreply@lever.co',
+    'position filled no longer considering your application careers@greenhouse.io',
+    'we have decided to go with another candidate jobs@workable.com',
+    'your application was unsuccessful alerts@indeed.com',
+    'unfortunately we cannot proceed with your application notifications@linkedin.com',
+    'we have opted to continue with other candidates careers@acmecorp.com',
+    'application status not moving forward noreply@lever.co',
+    'we will not be proceeding with your candidacy apply@greenhouse.io',
+    'regret to inform you position has been filled jobs@workable.com',
+    'thank you for your interest in the role update apply@bamboohr.com',
+    'we have decided to move forward with other applicants alerts@indeed.com',
+    'your application was not successful noreply@lever.co',
+    'unfortunately we have decided to pursue other directions careers@greenhouse.io',
+    'after careful consideration your application jobs@workable.com',
+    'we are writing to update you on your application status apply@bamboohr.com',
+  ];
+
+  const offer = [
+    'job offer for the position of noreply@lever.co',
+    'we are pleased to offer you the position careers@greenhouse.io',
+    'offer letter attached for your review jobs@workable.com',
+    'congratulations we are excited to offer you apply@bamboohr.com',
+    'compensation details for your new role notifications@linkedin.com',
+    'welcome to the team employment offer alerts@indeed.com',
+    'formal offer of employment from careers@acmecorp.com',
+    'we are delighted to extend an offer jobs@techstartup.io',
+    'offer package details for your review recruiting@bigcompany.com',
+    'employment offer agreement enclosed hr@company.com',
+    'congratulations on your new position offer talent@startup.com',
+    'start date and compensation details careers@enterprise.com',
+    'we would like to welcome you to the team offer noreply@lever.co',
+    'offer of employment terms and conditions apply@greenhouse.io',
+    'you have been selected for the position offer jobs@workable.com',
+    'pleased to inform you that we are offering apply@bamboohr.com',
+    'acceptance of your offer of employment alerts@indeed.com',
+    'salary offer and benefits package notifications@linkedin.com',
+    'we are happy to extend this offer of employment careers@acmecorp.com',
+    'offer details compensation start date jobs@techstartup.io',
+    'congratulations you have been selected for the role recruiting@bigcompany.com',
+    'equity compensation offer details hr@company.com',
+    'welcome aboard employment offer letter talent@startup.com',
+    'offer acceptance deadline information careers@enterprise.com',
+    'we look forward to welcoming you to the team offer noreply@lever.co',
+    'employment offer congratulations noreply@lever.co',
+    'offer letter from careers@greenhouse.io',
+    'job offer details compensation jobs@workable.com',
+    'you have received an offer apply@bamboohr.com',
+    'congratulations offer of employment alerts@indeed.com',
+    'offer acceptance form notifications@linkedin.com',
+    'your employment offer details careers@acmecorp.com',
+    'offer package compensation and benefits noreply@lever.co',
+    'welcome to the company offer letter careers@greenhouse.io',
+    'congrats you got the job offer jobs@workable.com',
+    'formal offer extension apply@bamboohr.com',
+    'offer negotiations details alerts@indeed.com',
+    'sign your offer letter notifications@linkedin.com',
+    'employment contract offer enclosed careers@acmecorp.com',
+    'congratulations you have been offered the position jobs@techstartup.io',
+    'offer terms and conditions recruiting@bigcompany.com',
+    'your new role offer details hr@company.com',
+    'we are thrilled to offer you the position talent@startup.com',
+    'offer for the role of careers@enterprise.com',
+    'offer confirmation please review noreply@lever.co',
+    'congratulations on your job offer apply@greenhouse.io',
+    'offer of employment details jobs@workable.com',
+    'new job offer waiting for your response alerts@indeed.com',
+    'compensation package offer details notifications@linkedin.com',
+    'your official offer letter careers@acmecorp.com',
+  ];
+
+  const other = [
+    'your monthly newsletter is ready noreply@mailchimp.com',
+    'password reset request for your account noreply@google.com',
+    'you have a new notification from noreply@slack.com',
+    'weekly digest of your activity noreply@github.com',
+    'your bill is ready for this month noreply@stripe.com',
+    'new login from unknown device noreply@facebook.com',
+    'please update your payment information noreply@netflix.com',
+    'your order has been shipped noreply@amazon.com',
+    'new message from your connection notifications@linkedin.com',
+    'security alert for your account noreply@twitter.com',
+    'your subscription is expiring soon noreply@spotify.com',
+    'someone liked your post noreply@instagram.com',
+    'weekly report is now available noreply@datadog.com',
+    'please verify your email address noreply@google.com',
+    'your account has been updated noreply@apple.com',
+    'new comment on your article noreply@medium.com',
+    'your package has been delivered noreply@fedex.com',
+    'two factor authentication code noreply@google.com',
+    'receipt for your recent purchase noreply@stripe.com',
+    'you have been mentioned in a post noreply@twitter.com',
+    'renew your subscription now noreply@hulu.com',
+    'new event invitation from noreply@facebook.com',
+    'your refund has been processed noreply@amazon.com',
+    'changes to our terms of service noreply@google.com',
+    'new device signed in noreply@apple.com',
+    'your payment receipt noreply@square.com',
+    'meeting room booking confirmed noreply@outlook.com',
+    'your food delivery is on its way noreply@doordash.com',
+    'new follower notification noreply@twitter.com',
+    'your server is running low on memory noreply@digitalocean.com',
+    'build failed for your project noreply@circleci.com',
+    'your deployment was successful noreply@vercel.com',
+    'new pull request review noreply@github.com',
+    'your dns settings have been updated noreply@cloudflare.com',
+    'credit card transaction alert noreply@chase.com',
+    'your bank statement is ready noreply@wellsfargo.com',
+    'appointment reminder for tomorrow noreply@zocdoc.com',
+    'your lab results are ready noreply@myhealth.com',
+    'new course available on your platform noreply@udemy.com',
+    'your certificate of completion noreply@coursera.org',
+    'new match found on noreply@tinder.com',
+    'your ride has arrived noreply@uber.com',
+    'booking confirmed at noreply@airbnb.com',
+    'your table is ready noreply@opentable.com',
+    'flight status update noreply@united.com',
+    'hotel booking confirmation noreply@booking.com',
+    'car rental confirmation noreply@hertz.com',
+    'your warranty is expiring noreply@bestbuy.com',
+    'new device registered noreply@google.com',
+    'backup completed successfully noreply@icloud.com',
+  ];
+
+  Object.entries({ application, interview, rejection, offer, other }).forEach(([label, texts]) => {
+    texts.forEach(t => c.addDocument(t, label));
+  });
+
+  c.train();
+  return c;
+}
+
+const emailCategoryClassifier = createEmailCategoryClassifier();
+const intentClassifier = createIntentClassifier();
+const jobEmailClassifier = createJobEmailClassifier();
+
+function classifyEmailCategory(subject, sender) {
+  const text = `${subject || ''} ${sender || ''}`.toLowerCase().replace(/<[^>]+>/g, ' ').trim();
+  if (!text) return { category: 'other', confidence: 0, scores: {} };
+
+  const classifications = emailCategoryClassifier.getClassifications(text);
+  const top = classifications[0];
+  const scores = {};
+  classifications.forEach(c => { scores[c.label] = Math.round(c.value * 100); });
+
+  return {
+    category: top.label,
+    confidence: Math.round(top.value * 100),
+    scores,
+  };
+}
+
+function classifyIntent(prompt) {
+  const text = (prompt || '').toLowerCase().trim();
+  if (!text) return { intent: 'general', confidence: 0, scores: {} };
+
+  const classifications = intentClassifier.getClassifications(text);
+  const top = classifications[0];
+  const scores = {};
+  classifications.forEach(c => { scores[c.label] = Math.round(c.value * 100); });
+
+  const confidence = Math.round(top.value * 100);
+
+  if (confidence < 65) {
+    return { intent: 'general', confidence, scores };
+  }
+
+  return {
+    intent: top.label,
+    confidence,
+    scores,
+  };
+}
 
 function classifyJobEmail(subject, sender, snippet) {
-  const text = `${subject || ''} ${sender || ''} ${snippet || ''}`;
-  const result = model.classify(text);
+  const text = `${subject || ''} ${sender || ''} ${snippet || ''}`.toLowerCase().replace(/<[^>]+>/g, ' ').trim();
+  if (!text) return null;
 
-  if (result.category === 'other' || result.confidence < 50) {
+  const classifications = jobEmailClassifier.getClassifications(text);
+  const top = classifications[0];
+  const scores = {};
+  classifications.forEach(c => { scores[c.label] = Math.round(c.value * 100); });
+
+  if (top.label === 'other' || Math.round(top.value * 100) < 60) {
     return null;
   }
 
   return {
-    category: result.category,
-    confidence: result.confidence,
-    scores: result.scores,
-    margin: result.margin,
+    category: top.label,
+    confidence: Math.round(top.value * 100),
+    scores,
+    margin: top.value - classifications[1].value,
   };
 }
 
-module.exports = { classifyJobEmail, NaiveBayes, model };
+function classifyJobEmails(emails) {
+  if (!emails || emails.length === 0) return [];
+
+  const results = [];
+
+  emails.forEach(email => {
+    const result = classifyJobEmail(email.subject, email.sender, email.snippet);
+    if (result) {
+      results.push({
+        emailId: email.id,
+        subject: email.subject,
+        sender: email.sender,
+        snippet: email.snippet,
+        date: email.internal_date,
+        category: result.category,
+        confidence: result.confidence,
+        scores: result.scores,
+      });
+    }
+  });
+
+  results.sort((a, b) => b.confidence - a.confidence);
+
+  const seen = new Set();
+  const deduped = [];
+  results.forEach(r => {
+    const key = (r.subject || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(r);
+    }
+  });
+
+  return deduped;
+}
+
+module.exports = {
+  classifyEmailCategory,
+  classifyIntent,
+  classifyJobEmail,
+  classifyJobEmails,
+};
