@@ -24,7 +24,32 @@ async function initDb() {
           snippet TEXT,
           body TEXT,
           internal_date INTEGER,
-          labels TEXT
+          labels TEXT,
+          has_attachments INTEGER DEFAULT 0,
+          attachment_count INTEGER DEFAULT 0,
+          email_size INTEGER DEFAULT 0,
+          account_id TEXT DEFAULT 'primary'
+        )
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS email_bodies (
+          email_id TEXT PRIMARY KEY,
+          body_text TEXT,
+          body_html TEXT,
+          FOREIGN KEY (email_id) REFERENCES emails(id)
+        )
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email_id TEXT,
+          filename TEXT,
+          mime_type TEXT,
+          size INTEGER,
+          attachment_id TEXT,
+          FOREIGN KEY (email_id) REFERENCES emails(id)
         )
       `);
 
@@ -38,11 +63,31 @@ async function initDb() {
       `);
 
       db.run(`
+        CREATE TABLE IF NOT EXISTS accounts (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL DEFAULT 'google',
+          email TEXT,
+          label TEXT,
+          is_active INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          last_synced_at TEXT
+        )
+      `);
+
+      db.run(`
         CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(internal_date)
       `);
 
       db.run(`
         CREATE INDEX IF NOT EXISTS idx_emails_sender ON emails(sender)
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_emails_subject ON emails(subject)
+      `);
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_emails_account ON emails(account_id)
       `);
 
       db.run(`
@@ -74,7 +119,35 @@ async function initDb() {
         )
       `);
 
-      db.run("ALTER TABLE job_applications ADD COLUMN location TEXT", () => {});
+      db.run(`
+        CREATE TABLE IF NOT EXISTS ai_insights (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type TEXT NOT NULL,
+          title TEXT,
+          content TEXT,
+          data_snapshot TEXT,
+          generated_at TEXT DEFAULT (datetime('now')),
+          is_read INTEGER DEFAULT 0
+        )
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS calendar_events (
+          id TEXT PRIMARY KEY,
+          account_id TEXT DEFAULT 'primary',
+          summary TEXT,
+          description TEXT,
+          start_time INTEGER,
+          end_time INTEGER,
+          event_type TEXT,
+          email_count INTEGER DEFAULT 0
+        )
+      `);
+
+      db.run("ALTER TABLE emails ADD COLUMN has_attachments INTEGER DEFAULT 0", () => {});
+      db.run("ALTER TABLE emails ADD COLUMN attachment_count INTEGER DEFAULT 0", () => {});
+      db.run("ALTER TABLE emails ADD COLUMN email_size INTEGER DEFAULT 0", () => {});
+      db.run("ALTER TABLE emails ADD COLUMN account_id TEXT DEFAULT 'primary'", () => {});
     });
 
     db.on('open', () => resolve());
@@ -85,8 +158,8 @@ async function initDb() {
 async function insertEmail(email) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         email.id,
         email.threadId,
@@ -97,6 +170,10 @@ async function insertEmail(email) {
         email.body,
         email.internalDate,
         JSON.stringify(email.labels || []),
+        email.hasAttachments ? 1 : 0,
+        email.attachmentCount || 0,
+        email.emailSize || 0,
+        email.accountId || 'primary',
       ],
       function (err) {
         if (err) return reject(err);
@@ -111,8 +188,8 @@ async function insertEmails(emails) {
     db.serialize(() => {
       db.run('BEGIN TRANSACTION');
       const stmt = db.prepare(
-        `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       emails.forEach((email) => {
@@ -127,6 +204,10 @@ async function insertEmails(emails) {
             email.body,
             email.internalDate,
             JSON.stringify(email.labels || []),
+            email.hasAttachments ? 1 : 0,
+            email.attachmentCount || 0,
+            email.emailSize || 0,
+            email.accountId || 'primary',
           ]
         );
       });
@@ -136,6 +217,70 @@ async function insertEmails(emails) {
         if (err) return reject(err);
         resolve(emails.length);
       });
+    });
+  });
+}
+
+async function saveEmailBody(emailId, bodyText, bodyHtml) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO email_bodies (email_id, body_text, body_html) VALUES (?, ?, ?)`,
+      [emailId, bodyText, bodyHtml],
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+async function getEmailBody(emailId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM email_bodies WHERE email_id = ?', [emailId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row);
+    });
+  });
+}
+
+async function getAttachmentStats() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT COUNT(*) as total_attachments, SUM(size) as total_size, mime_type
+       FROM attachments GROUP BY mime_type ORDER BY total_attachments DESC`,
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+async function saveAttachments(emailId, attachments) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      db.run('DELETE FROM attachments WHERE email_id = ?', [emailId]);
+      const stmt = db.prepare(
+        `INSERT INTO attachments (email_id, filename, mime_type, size, attachment_id) VALUES (?, ?, ?, ?, ?)`
+      );
+      (attachments || []).forEach(a => {
+        stmt.run([emailId, a.filename, a.mimeType, a.size, a.attachmentId]);
+      });
+      stmt.finalize();
+      db.run('COMMIT', (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  });
+}
+
+async function getEmailAttachments(emailId) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM attachments WHERE email_id = ?', [emailId], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
     });
   });
 }
@@ -251,6 +396,70 @@ async function getLatestEmailDate() {
   });
 }
 
+async function getEmailsByThread(threadId) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM emails WHERE thread_id = ? ORDER BY internal_date ASC', [threadId], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
+
+async function searchEmails(query, filters = {}) {
+  return new Promise((resolve, reject) => {
+    let sql = 'SELECT id, subject, sender, snippet, internal_date, labels, has_attachments FROM emails WHERE 1=1';
+    const params = [];
+
+    if (query) {
+      sql += ' AND (subject LIKE ? OR sender LIKE ? OR snippet LIKE ? OR body LIKE ?)';
+      const like = `%${query}%`;
+      params.push(like, like, like, like);
+    }
+
+    if (filters.sender) {
+      sql += ' AND sender LIKE ?';
+      params.push(`%${filters.sender}%`);
+    }
+
+    if (filters.dateFrom) {
+      sql += ' AND internal_date >= ?';
+      params.push(new Date(filters.dateFrom).getTime());
+    }
+
+    if (filters.dateTo) {
+      sql += ' AND internal_date <= ?';
+      params.push(new Date(filters.dateTo + 'T23:59:59').getTime());
+    }
+
+    if (filters.hasAttachments) {
+      sql += ' AND has_attachments = 1';
+    }
+
+    if (filters.label) {
+      sql += ' AND labels LIKE ?';
+      params.push(`%${filters.label}%`);
+    }
+
+    if (filters.accountId) {
+      sql += ' AND account_id = ?';
+      params.push(filters.accountId);
+    }
+
+    if (filters.category) {
+      sql += ' AND category = ?';
+      params.push(filters.category);
+    }
+
+    sql += ' ORDER BY internal_date DESC LIMIT ?';
+    params.push(filters.limit || 100);
+
+    db.all(sql, params, (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
+
 async function getJobApplications() {
   return new Promise((resolve, reject) => {
     db.all('SELECT * FROM job_applications ORDER BY date_applied DESC', (err, rows) => {
@@ -305,4 +514,152 @@ async function deleteJobApplication(id) {
   });
 }
 
-module.exports = { initDb, closeDb, getDb, insertEmail, insertEmails, saveToken, getToken, clearTokens, clearEmails, saveDashboardWidgets, getDashboardWidgets, getLatestEmailDate, getJobApplications, addJobApplication, updateJobApplication, deleteJobApplication, clearJobApplications };
+async function saveAiInsight(insight) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO ai_insights (type, title, content, data_snapshot) VALUES (?, ?, ?, ?)`,
+      [insight.type, insight.title, insight.content, insight.dataSnapshot || null],
+      function (err) {
+        if (err) return reject(err);
+        resolve({ id: this.lastID });
+      }
+    );
+  });
+}
+
+async function getAiInsights(limit = 20) {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM ai_insights ORDER BY generated_at DESC LIMIT ?', [limit], (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows);
+    });
+  });
+}
+
+async function markInsightRead(id) {
+  return new Promise((resolve, reject) => {
+    db.run('UPDATE ai_insights SET is_read = 1 WHERE id = ?', [id], function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
+
+async function saveCalendarEvents(events) {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      db.run('BEGIN TRANSACTION');
+      const stmt = db.prepare(
+        `INSERT OR REPLACE INTO calendar_events (id, account_id, summary, description, start_time, end_time, event_type, email_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      events.forEach(e => {
+        stmt.run([e.id, e.accountId || 'primary', e.summary, e.description, e.startTime, e.endTime, e.eventType, e.emailCount || 0]);
+      });
+      stmt.finalize();
+      db.run('COMMIT', (err) => {
+        if (err) return reject(err);
+        resolve(events.length);
+      });
+    });
+  });
+}
+
+async function getCalendarEvents(dateFrom, dateTo) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      'SELECT * FROM calendar_events WHERE start_time >= ? AND start_time <= ? ORDER BY start_time',
+      [dateFrom, dateTo],
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+async function getCalendarEmailCorrelation() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT DATE(c.start_time / 1000, 'unixepoch') as date,
+              COUNT(c.id) as event_count,
+              COUNT(e.id) as email_count
+       FROM calendar_events c
+       LEFT JOIN emails e ON DATE(e.internal_date / 1000, 'unixepoch') = DATE(c.start_time / 1000, 'unixepoch')
+       GROUP BY date
+       ORDER BY date DESC
+       LIMIT 30`,
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+async function getDashStats() {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT
+        COUNT(*) as total_emails,
+        COUNT(DISTINCT sender) as unique_senders,
+        SUM(has_attachments) as emails_with_attachments,
+        SUM(attachment_count) as total_attachments,
+        AVG(email_size) as avg_email_size
+      FROM emails`,
+      (err, row) => {
+        if (err) return reject(err);
+        resolve(row);
+      }
+    );
+  });
+}
+
+async function getDailyEmailVolume(days = 30) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT DATE(internal_date / 1000, 'unixepoch') as date,
+              COUNT(*) as count,
+              SUM(has_attachments) as attachments,
+              AVG(email_size) as avg_size
+       FROM emails
+       WHERE internal_date > ?
+       GROUP BY date
+       ORDER BY date DESC
+       LIMIT ?`,
+      [Date.now() - days * 86400000, days],
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows);
+      }
+    );
+  });
+}
+
+async function getEmailById(id) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM emails WHERE id = ?', [id], (err, row) => {
+      if (err) return reject(err);
+      if (row) {
+        row.labels = JSON.parse(row.labels || '[]');
+      }
+      resolve(row);
+    });
+  });
+}
+
+module.exports = {
+  initDb, closeDb, getDb,
+  insertEmail, insertEmails,
+  saveEmailBody, getEmailBody,
+  saveAttachments, getEmailAttachments, getAttachmentStats,
+  saveToken, getToken, clearTokens, clearEmails,
+  saveDashboardWidgets, getDashboardWidgets,
+  getLatestEmailDate,
+  getEmailsByThread,
+  searchEmails,
+  getJobApplications, addJobApplication, updateJobApplication, deleteJobApplication, clearJobApplications,
+  saveAiInsight, getAiInsights, markInsightRead,
+  saveCalendarEvents, getCalendarEvents, getCalendarEmailCorrelation,
+  getDashStats, getDailyEmailVolume, getEmailById,
+};

@@ -11,7 +11,10 @@
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "rebuild": "electron-rebuild --arch arm64",
-    "postinstall": "electron-rebuild --arch arm64"
+    "postinstall": "electron-rebuild --arch arm64",
+    "test": "node tests/ml.test.js",
+    "test:ml": "node tests/ml.test.js",
+    "test:ai": "node tests/ai.test.js"
   },
   "build": {
     "appId": "com.analy.app",

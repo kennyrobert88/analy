@@ -16,11 +16,24 @@
         <div class="workspace-icon">A</div>
         <span>Analy</span>
       </div>
+      <button id="themeToggle" class="theme-toggle-btn" title="Toggle dark mode">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
     </div>
     <nav class="sidebar-nav">
       <a href="#" class="nav-item active" data-section="dashboard">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Dashboard
+      </a>
+      <a href="#" class="nav-item" data-section="inbox">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        Inbox
+      </a>
+      <a href="#" class="nav-item" data-section="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Search
       </a>
       <a href="#" class="nav-item" data-section="senders">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -37,6 +50,10 @@
       <a href="#" class="nav-item" data-section="jobs">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
         Job Applications
+      </a>
+      <a href="#" class="nav-item" data-section="calendar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Calendar
       </a>
     </nav>
     <div class="sidebar-footer">
@@ -68,6 +85,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Fetch Emails
         </button>
+        <button id="exportBtn" class="btn btn-secondary" style="display: none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+        </button>
         <button id="logoutBtnTop" class="btn btn-logout" style="display: none;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Logout
@@ -76,6 +97,10 @@
     </header>
 
     <div class="page-content">
+      <!-- Toast Container -->
+      <div class="toast-container" id="toastContainer"></div>
+
+      <!-- Auth Section -->
       <section id="authSection" class="section">
         <div class="empty-state">
           <div class="empty-icon">📧</div>
@@ -89,12 +114,10 @@
       </section>
 
       <section id="dashboardSection" class="section" style="display: none;">
+        <!-- Dashboard -->
         <div class="section" id="dashboard">
           <div class="page-header">
-            <h1 class="page-title">
-              <span class="page-icon">📊</span>
-              Dashboard
-            </h1>
+            <h1 class="page-title"><span class="page-icon">📊</span> Dashboard</h1>
             <p class="page-description">Your email analytics overview.</p>
             <div class="stats-overview">
               <div class="stat-card">
@@ -109,89 +132,131 @@
                 <span class="stat-number" id="uniqueSendersDashboard">-</span>
                 <span class="stat-label">Senders</span>
               </div>
+              <div class="stat-card">
+                <span class="stat-number" id="emailWithAttachments">-</span>
+                <span class="stat-label">Attachments</span>
+              </div>
             </div>
             <button id="refreshWidgetsBtn" class="btn btn-secondary" style="margin-left: 16px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/></svg>
               Refresh Data
             </button>
+            <button id="generateInsightsBtn" class="btn btn-secondary" style="margin-left: 8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6.66z"/></svg>
+              AI Insights
+            </button>
           </div>
+
+          <div id="proactiveInsights" style="margin-bottom: 24px;"></div>
 
           <div class="default-analytics">
             <div class="analytics-card">
               <h3>Emails by Hour</h3>
-              <div class="chart-container">
-                <canvas id="defaultHourlyChart"></canvas>
-              </div>
+              <div class="chart-container"><canvas id="defaultHourlyChart"></canvas></div>
             </div>
             <div class="analytics-card">
               <h3>Emails by Day</h3>
-              <div class="chart-container">
-                <canvas id="defaultDailyChart"></canvas>
-              </div>
+              <div class="chart-container"><canvas id="defaultDailyChart"></canvas></div>
             </div>
           </div>
 
-          <div id="dashboardGrid" class="dashboard-grid" style="margin-top: 24px;">
+          <div id="dashboardGrid" class="dashboard-grid" style="margin-top: 24px;"></div>
+        </div>
+
+        <!-- Inbox -->
+        <div class="section" id="inbox" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title"><span class="page-icon">📥</span> Inbox</h1>
+            <p class="page-description">Browse and read your emails.</p>
+          </div>
+          <div class="search-bar">
+            <input type="text" id="inboxSearch" placeholder="Search inbox...">
+            <button id="inboxSearchBtn" class="btn btn-primary">Search</button>
+          </div>
+          <div id="inboxList" class="inbox-list">
+            <div class="empty-dashboard"><p>Loading emails...</p></div>
+          </div>
+          <div id="emailDetail" style="display: none; margin-top: 20px;">
+            <button id="backToInbox" class="btn btn-secondary" style="margin-bottom: 16px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              Back
+            </button>
+            <div class="email-detail-header">
+              <div class="email-detail-subject" id="detailSubject"></div>
+              <div class="email-detail-meta" id="detailMeta"></div>
+              <div class="email-detail-labels" id="detailLabels"></div>
+            </div>
+            <div class="email-detail-body" id="detailBody"></div>
+            <div class="email-detail-attachments" id="detailAttachments"></div>
+            <div style="margin-top: 16px;">
+              <h3 style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;">Thread</h3>
+              <div id="threadList"></div>
+            </div>
           </div>
         </div>
 
+        <!-- Search -->
+        <div class="section" id="search" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title"><span class="page-icon">🔍</span> Search Emails</h1>
+            <p class="page-description">Find emails by sender, subject, date, or content.</p>
+          </div>
+          <div class="search-bar">
+            <input type="text" id="searchQuery" placeholder="Search by subject, sender, or content...">
+            <button id="searchBtn" class="btn btn-primary">Search</button>
+          </div>
+          <div class="search-filters">
+            <input type="text" id="filterSender" placeholder="Filter by sender...">
+            <input type="date" id="filterDateFrom">
+            <input type="date" id="filterDateTo">
+            <select id="filterAttachments">
+              <option value="">Any attachments</option>
+              <option value="yes">Has attachments</option>
+              <option value="no">No attachments</option>
+            </select>
+          </div>
+          <div id="searchResults" class="inbox-list">
+            <div class="empty-dashboard"><p>Enter a query to search your emails.</p></div>
+          </div>
+        </div>
+
+        <!-- Senders -->
         <div class="section" id="senders" style="display: none;">
           <div class="page-header">
-            <h1 class="page-title">
-              <span class="page-icon">👥</span>
-              Top Senders
-            </h1>
+            <h1 class="page-title"><span class="page-icon">👥</span> Top Senders</h1>
             <p class="page-description">Who sends you the most emails.</p>
           </div>
-
           <div class="database-table">
             <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Sender</th>
-                  <th>Email Count</th>
-                  <th>Percentage</th>
-                </tr>
-              </thead>
-              <tbody id="sendersTableBody">
-              </tbody>
+              <thead><tr><th>Rank</th><th>Sender</th><th>Email Count</th><th>Percentage</th></tr></thead>
+              <tbody id="sendersTableBody"></tbody>
             </table>
           </div>
-
           <div class="chart-container" style="margin-top: 24px;">
             <h3>Sender Distribution</h3>
             <canvas id="topSendersChart"></canvas>
           </div>
         </div>
 
+        <!-- Trends -->
         <div class="section" id="trends" style="display: none;">
           <div class="page-header">
-            <h1 class="page-title">
-              <span class="page-icon">📈</span>
-              Trends & Patterns
-            </h1>
+            <h1 class="page-title"><span class="page-icon">📈</span> Trends & Patterns</h1>
             <p class="page-description">How your email volume changes over time.</p>
           </div>
-
-          <div class="insights-list" id="trendsInsights">
-          </div>
-
+          <div class="insights-list" id="trendsInsights"></div>
           <div class="chart-container">
             <h3>Email Volume (Last 30 Days)</h3>
             <canvas id="trendsChart"></canvas>
           </div>
         </div>
 
+        <!-- AI Insights -->
         <div class="section" id="ai-insights" style="display: none;">
           <div class="page-header">
-            <h1 class="page-title">
-              <span class="page-icon">🧠</span>
-              AI Insights
-            </h1>
+            <h1 class="page-title"><span class="page-icon">🧠</span> AI Insights</h1>
             <p class="page-description">Ask questions about your email patterns.</p>
           </div>
-
           <div class="prompt-container">
             <div class="prompt-input-wrapper">
               <span class="prompt-icon">/</span>
@@ -207,7 +272,6 @@
               <span class="suggestion" data-prompt="What's my email pattern by day of week?">Weekly pattern</span>
             </div>
           </div>
-
           <div id="aiResults" class="ai-results">
             <div class="ai-empty-state">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6.66z"/></svg>
@@ -216,12 +280,10 @@
           </div>
         </div>
 
+        <!-- Job Applications -->
         <div class="section" id="jobs" style="display: none;">
           <div class="page-header">
-            <h1 class="page-title">
-              <span class="page-icon">💼</span>
-              Job Applications
-            </h1>
+            <h1 class="page-title"><span class="page-icon">💼</span> Job Applications</h1>
             <p class="page-description">Track your job applications, interviews, and offers.</p>
             <div class="jobs-toolbar">
               <button id="addJobBtn" class="btn btn-primary">
@@ -236,47 +298,25 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6.66z"/></svg>
                 AI Insights
               </button>
+              <button id="exportJobsBtn" class="btn btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
+              </button>
             </div>
           </div>
 
           <div class="jobs-stats">
-            <div class="stat-card">
-              <span class="stat-number" id="jobsTotal">0</span>
-              <span class="stat-label">Total</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="jobsApplied">0</span>
-              <span class="stat-label">Applied</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="jobsInterview">0</span>
-              <span class="stat-label">Interview</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="jobsRejected">0</span>
-              <span class="stat-label">Rejected</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-number" id="jobsAccepted">0</span>
-              <span class="stat-label">Accepted</span>
-            </div>
+            <div class="stat-card"><span class="stat-number" id="jobsTotal">0</span><span class="stat-label">Total</span></div>
+            <div class="stat-card"><span class="stat-number" id="jobsApplied">0</span><span class="stat-label">Applied</span></div>
+            <div class="stat-card"><span class="stat-number" id="jobsInterview">0</span><span class="stat-label">Interview</span></div>
+            <div class="stat-card"><span class="stat-number" id="jobsRejected">0</span><span class="stat-label">Rejected</span></div>
+            <div class="stat-card"><span class="stat-number" id="jobsAccepted">0</span><span class="stat-label">Accepted</span></div>
           </div>
 
           <div class="database-table" style="margin-top: 20px;">
             <table>
-              <thead>
-                <tr>
-                  <th>Job Title</th>
-                  <th>Job ID</th>
-                  <th>Company</th>
-                  <th>Location</th>
-                  <th>Status</th>
-                  <th>Date Applied</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="jobsTableBody">
-              </tbody>
+              <thead><tr><th>Job Title</th><th>Job ID</th><th>Company</th><th>Location</th><th>Status</th><th>Date Applied</th><th>Actions</th></tr></thead>
+              <tbody id="jobsTableBody"></tbody>
             </table>
           </div>
 
@@ -285,7 +325,27 @@
             <div id="scanResultsBody"></div>
           </div>
 
-          <div id="jobsAnalysis" class="ai-results" style="margin-top: 20px; display: none;">
+          <div id="jobsAnalysis" class="ai-results" style="margin-top: 20px; display: none;"></div>
+        </div>
+
+        <!-- Calendar -->
+        <div class="section" id="calendar" style="display: none;">
+          <div class="page-header">
+            <h1 class="page-title"><span class="page-icon">📅</span> Calendar</h1>
+            <p class="page-description">Correlate your calendar events with email activity.</p>
+            <div class="toolbar">
+              <button id="syncCalendarBtn" class="btn btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/></svg>
+                Sync Calendar
+              </button>
+            </div>
+          </div>
+          <div id="calendarData" style="margin-top: 16px;">
+            <div class="empty-dashboard"><p>Sync your Google Calendar to see correlations with email activity.</p></div>
+          </div>
+          <div class="chart-container" style="margin-top: 24px;">
+            <h3>Calendar vs Email Activity</h3>
+            <canvas id="calendarChart"></canvas>
           </div>
         </div>
       </section>
@@ -300,39 +360,15 @@
         <button class="modal-close" id="closeJobModalBtn">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label for="jobTitleInput">Job Title *</label>
-          <input type="text" id="jobTitleInput" placeholder="e.g. Senior Software Engineer">
+        <div class="form-group"><label for="jobTitleInput">Job Title *</label><input type="text" id="jobTitleInput" placeholder="e.g. Senior Software Engineer"></div>
+        <div class="form-group"><label for="jobIdInput">Job ID</label><input type="text" id="jobIdInput" placeholder="e.g. REQ-12345"></div>
+        <div class="form-group"><label for="companyInput">Company Name *</label><input type="text" id="companyInput" placeholder="e.g. Acme Corp"></div>
+        <div class="form-group"><label for="locationInput">Location</label><input type="text" id="locationInput" placeholder="e.g. Singapore, Jakarta, Remote"></div>
+        <div class="form-group"><label for="statusInput">Status</label>
+          <select id="statusInput"><option value="applied">Applied</option><option value="interview">Interview</option><option value="rejected">Rejected</option><option value="accepted">Accepted</option></select>
         </div>
-        <div class="form-group">
-          <label for="jobIdInput">Job ID</label>
-          <input type="text" id="jobIdInput" placeholder="e.g. REQ-12345">
-        </div>
-        <div class="form-group">
-          <label for="companyInput">Company Name *</label>
-          <input type="text" id="companyInput" placeholder="e.g. Acme Corp">
-        </div>
-        <div class="form-group">
-          <label for="locationInput">Location</label>
-          <input type="text" id="locationInput" placeholder="e.g. Singapore, Jakarta, Remote">
-        </div>
-        <div class="form-group">
-          <label for="statusInput">Status</label>
-          <select id="statusInput">
-            <option value="applied">Applied</option>
-            <option value="interview">Interview</option>
-            <option value="rejected">Rejected</option>
-            <option value="accepted">Accepted</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="dateInput">Date Applied *</label>
-          <input type="date" id="dateInput">
-        </div>
-        <div class="form-group">
-          <label for="notesInput">Notes</label>
-          <textarea id="notesInput" rows="3" placeholder="Additional notes..."></textarea>
-        </div>
+        <div class="form-group"><label for="dateInput">Date Applied *</label><input type="date" id="dateInput"></div>
+        <div class="form-group"><label for="notesInput">Notes</label><textarea id="notesInput" rows="3" placeholder="Additional notes..."></textarea></div>
       </div>
       <div class="modal-footer">
         <button id="deleteJobBtn" class="btn btn-danger" style="display: none;">Delete</button>
@@ -352,35 +388,15 @@
         <button class="modal-close" id="closeModalBtn">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <label for="widgetTitle">Widget Title</label>
-          <input type="text" id="widgetTitle" placeholder="Enter widget title">
+        <div class="form-group"><label for="widgetTitle">Widget Title</label><input type="text" id="widgetTitle" placeholder="Enter widget title"></div>
+        <div class="form-group"><label for="widgetType">Chart Type</label>
+          <select id="widgetType"><option value="bar">Bar Chart</option><option value="line">Line Chart</option><option value="pie">Pie Chart</option><option value="doughnut">Doughnut Chart</option><option value="horizontalBar">Horizontal Bar</option></select>
         </div>
-        <div class="form-group">
-          <label for="widgetType">Chart Type</label>
-          <select id="widgetType">
-            <option value="bar">Bar Chart</option>
-            <option value="line">Line Chart</option>
-            <option value="pie">Pie Chart</option>
-            <option value="doughnut">Doughnut Chart</option>
-            <option value="horizontalBar">Horizontal Bar</option>
-          </select>
+        <div class="form-group"><label for="widgetDataSource">Data Source</label>
+          <select id="widgetDataSource"><option value="emailsByDate">Emails by Date</option><option value="senders">Top Senders</option><option value="categories">Email Categories</option><option value="hourlyDistribution">Hourly Distribution</option></select>
         </div>
-        <div class="form-group">
-          <label for="widgetDataSource">Data Source</label>
-          <select id="widgetDataSource">
-            <option value="emailsByDate">Emails by Date</option>
-            <option value="senders">Top Senders</option>
-            <option value="categories">Email Categories</option>
-            <option value="hourlyDistribution">Hourly Distribution</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="widgetWidth">Width (columns)</label>
-          <select id="widgetWidth">
-            <option value="1">1 Column</option>
-            <option value="2">2 Columns</option>
-          </select>
+        <div class="form-group"><label for="widgetWidth">Width (columns)</label>
+          <select id="widgetWidth"><option value="1">1 Column</option><option value="2">2 Columns</option></select>
         </div>
       </div>
       <div class="modal-footer">
@@ -388,6 +404,66 @@
         <div class="modal-footer-right">
           <button id="cancelWidgetBtn" class="btn btn-secondary">Cancel</button>
           <button id="saveWidgetBtn" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Training Data Modal -->
+  <div id="trainingModal" class="modal" style="display: none;">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h2 id="trainingModalTitle">Training Data</h2>
+        <button class="modal-close" id="closeTrainingModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Edit the training data for the ML classifiers. Changes are saved to JSON files and the classifiers are retrained automatically.</p>
+        <div class="training-controls">
+          <button class="btn btn-secondary training-tab active" data-training-type="categories">Email Categories</button>
+          <button class="btn btn-secondary training-tab" data-training-type="intents">Intents</button>
+          <button class="btn btn-secondary training-tab" data-training-type="jobEmails">Job Emails</button>
+        </div>
+        <div class="training-editor">
+          <textarea id="trainingEditor" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-right">
+          <button id="cancelTrainingBtn" class="btn btn-secondary">Cancel</button>
+          <button id="saveTrainingBtn" class="btn btn-primary">Save & Retrain</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exportModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Export Data</h2>
+        <button class="modal-close" id="closeExportModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;">Choose what to export and the format.</p>
+        <div class="form-group">
+          <label>Data Type</label>
+          <select id="exportDataType">
+            <option value="emails">Email Data</option>
+            <option value="jobs">Job Applications</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Format</label>
+          <select id="exportFormat">
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-right">
+          <button id="cancelExportBtn" class="btn btn-secondary">Cancel</button>
+          <button id="doExportBtn" class="btn btn-primary">Export</button>
         </div>
       </div>
     </div>

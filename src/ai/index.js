@@ -1,4 +1,5 @@
 const { classifyEmailCategory, classifyIntent, classifyJobEmails: mlClassifyJobEmails } = require('../ml');
+const { getDb, saveAiInsight, getAiInsights, getDashStats, getDailyEmailVolume } = require('../db');
 
 const INTENT_HANDLERS = {
   top_sender: handleTopSender,
@@ -235,4 +236,57 @@ function classifyJobEmails(emails) {
   return mlClassifyJobEmails(emails);
 }
 
-module.exports = { analyzeEmails, analyzeJobApplications, classifyJobEmails };
+async function generateProactiveInsights() {
+  try {
+    const stats = await getDashStats();
+    const dailyVolume = await getDailyEmailVolume(7);
+
+    const insights = [];
+
+    if (stats && stats.total_emails > 0) {
+      if (stats.emails_with_attachments > 0) {
+        insights.push({
+          type: 'attachment_insight',
+          title: 'Attachment Usage',
+          content: `${stats.emails_with_attachments} of your ${stats.total_emails} emails have attachments (${Math.round(stats.emails_with_attachments / stats.total_emails * 100)}%). Total attachments: ${stats.total_attachments}.`,
+          dataSnapshot: JSON.stringify(stats),
+        });
+      }
+
+      if (dailyVolume && dailyVolume.length >= 2) {
+        const today = dailyVolume[0];
+        const yesterday = dailyVolume[1];
+        if (today && yesterday && yesterday.count > 0) {
+          const change = Math.round((today.count - yesterday.count) / yesterday.count * 100);
+          if (Math.abs(change) > 50) {
+            insights.push({
+              type: 'volume_anomaly',
+              title: 'Email Volume Change',
+              content: `Your email volume ${change > 0 ? 'increased' : 'decreased'} by ${Math.abs(change)}% compared to yesterday. ${change > 0 ? 'Busy day!' : 'Enjoy the quiet inbox.'}`,
+              dataSnapshot: JSON.stringify({ today: today.count, yesterday: yesterday.count, change }),
+            });
+          }
+        }
+
+        const weekTotal = dailyVolume.reduce((s, d) => s + d.count, 0);
+        const avgPerDay = Math.round(weekTotal / dailyVolume.length);
+        insights.push({
+          type: 'weekly_summary',
+          title: 'Weekly Email Summary',
+          content: `You received ${weekTotal} emails this week (avg ${avgPerDay}/day).`,
+          dataSnapshot: JSON.stringify({ weekTotal, avgPerDay, days: dailyVolume.length }),
+        });
+      }
+    }
+
+    for (const insight of insights) {
+      await saveAiInsight(insight);
+    }
+
+    return insights;
+  } catch (err) {
+    return [];
+  }
+}
+
+module.exports = { analyzeEmails, analyzeJobApplications, classifyJobEmails, generateProactiveInsights };

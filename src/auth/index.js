@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 const http = require('http');
 const url = require('url');
-const { saveToken, getToken, clearTokens, getLatestEmailDate } = require('../db');
+const { saveToken, getToken, clearTokens, getLatestEmailDate, insertEmails } = require('../db');
 
 let oauth2Client;
 let callbackServer;
@@ -9,6 +9,7 @@ let callbackServer;
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.labels',
+  'https://www.googleapis.com/auth/calendar.readonly',
 ];
 
 const PORT = 3000;
@@ -29,7 +30,7 @@ function startCallbackServer(onCallback) {
 
     callbackServer = http.createServer(async (req, res) => {
       const parsedUrl = url.parse(req.url, true);
-      
+
       if (parsedUrl.pathname === '/oauth2callback' || parsedUrl.pathname === '/') {
         const code = parsedUrl.query.code;
         const error = parsedUrl.query.error;
@@ -125,17 +126,8 @@ function getSuccessPage() {
           height: 40px;
           stroke: white;
         }
-        h1 {
-          font-size: 24px;
-          color: #1a1a2e;
-          margin-bottom: 8px;
-        }
-        p {
-          color: #6c757d;
-          font-size: 15px;
-          line-height: 1.5;
-          margin-bottom: 24px;
-        }
+        h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 8px; }
+        p { color: #6c757d; font-size: 15px; line-height: 1.5; margin-bottom: 24px; }
         .btn {
           display: inline-flex;
           align-items: center;
@@ -161,20 +153,13 @@ function getSuccessPage() {
           font-size: 13px;
           color: #787774;
         }
-        .status-dot {
-          width: 8px;
-          height: 8px;
-          background: #22c55e;
-          border-radius: 50%;
-        }
+        .status-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
       </style>
     </head>
     <body>
       <div class="container">
         <div class="icon-circle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
         </div>
         <h1>Connected Successfully!</h1>
         <p>Your Gmail account is now connected to Analy. You can close this window and return to the app.</p>
@@ -192,81 +177,19 @@ function getErrorPage(error) {
   return `
     <!DOCTYPE html>
     <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Error - Analy</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        }
-        .container {
-          background: white;
-          border-radius: 16px;
-          padding: 48px 40px;
-          max-width: 420px;
-          width: 100%;
-          text-align: center;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-          animation: slideUp 0.4s ease;
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .icon-circle {
-          width: 80px;
-          height: 80px;
-          background: linear-gradient(135deg, #f87171, #ef4444);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 24px;
-        }
-        .icon-circle svg {
-          width: 40px;
-          height: 40px;
-          stroke: white;
-        }
-        h1 {
-          font-size: 24px;
-          color: #1a1a2e;
-          margin-bottom: 8px;
-        }
-        p {
-          color: #6c757d;
-          font-size: 15px;
-          line-height: 1.5;
-          margin-bottom: 24px;
-        }
-        .error-msg {
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          padding: 12px 16px;
-          font-family: monospace;
-          font-size: 13px;
-          color: #991b1b;
-          margin-bottom: 20px;
-        }
-      </style>
-    </head>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Error - Analy</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:linear-gradient(135deg,#f87171 0%,#ef4444 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+      .container { background:white; border-radius:16px; padding:48px 40px; max-width:420px; width:100%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+      .icon-circle { width:80px; height:80px; background:linear-gradient(135deg,#f87171,#ef4444); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 24px; }
+      h1 { font-size:24px; color:#1a1a2e; margin-bottom:8px; }
+      p { color:#6c757d; font-size:15px; line-height:1.5; margin-bottom:24px; }
+      .error-msg { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:12px 16px; font-family:monospace; font-size:13px; color:#991b1b; margin-bottom:20px; }
+    </style></head>
     <body>
       <div class="container">
-        <div class="icon-circle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </div>
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
         <h1>Authentication Failed</h1>
         <div class="error-msg">${error}</div>
         <p>Please try again or check your app configuration.</p>
@@ -280,72 +203,18 @@ function getLogoutPage() {
   return `
     <!DOCTYPE html>
     <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Logged Out - Analy</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-        }
-        .container {
-          background: white;
-          border-radius: 16px;
-          padding: 48px 40px;
-          max-width: 420px;
-          width: 100%;
-          text-align: center;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-          animation: slideUp 0.4s ease;
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .icon-circle {
-          width: 80px;
-          height: 80px;
-          background: linear-gradient(135deg, #94a3b8, #64748b);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 24px;
-        }
-        .icon-circle svg {
-          width: 40px;
-          height: 40px;
-          stroke: white;
-        }
-        h1 {
-          font-size: 24px;
-          color: #1a1a2e;
-          margin-bottom: 8px;
-        }
-        p {
-          color: #6c757d;
-          font-size: 15px;
-          line-height: 1.5;
-          margin-bottom: 24px;
-        }
-      </style>
-    </head>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Logged Out - Analy</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:linear-gradient(135deg,#94a3b8 0%,#64748b 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+      .container { background:white; border-radius:16px; padding:48px 40px; max-width:420px; width:100%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+      .icon-circle { width:80px; height:80px; background:linear-gradient(135deg,#94a3b8,#64748b); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 24px; }
+      h1 { font-size:24px; color:#1a1a2e; margin-bottom:8px; }
+      p { color:#6c757d; font-size:15px; }
+    </style></head>
     <body>
       <div class="container">
-        <div class="icon-circle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-            <polyline points="16 17 21 12 16 7"></polyline>
-            <line x1="21" y1="12" x2="9" y2="12"></line>
-          </svg>
-        </div>
+        <div class="icon-circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></div>
         <h1>Logged Out</h1>
         <p>Your account has been disconnected. You can close this window and return to the app.</p>
       </div>
@@ -510,6 +379,11 @@ async function fetchEmails(maxResults = 100, incremental = true) {
     const subject = headers.find((h) => h.name === 'Subject')?.value || '';
     const date = headers.find((h) => h.name === 'Date')?.value || '';
 
+    const hasAttachments = (msg.data.labelIds || []).includes('ATTACHMENTS') ||
+      (msg.data.payload?.parts || []).some(p => p.filename && p.filename.length > 0);
+
+    const emailSize = msg.data.sizeEstimate || 0;
+
     emails.push({
       id: msg.data.id,
       threadId: msg.data.threadId,
@@ -520,6 +394,10 @@ async function fetchEmails(maxResults = 100, incremental = true) {
       body: '',
       internalDate: parseInt(msg.data.internalDate),
       labels: msg.data.labelIds || [],
+      hasAttachments,
+      attachmentCount: 0,
+      emailSize,
+      accountId: 'primary',
     });
   }
 
@@ -527,6 +405,105 @@ async function fetchEmails(maxResults = 100, incremental = true) {
   await insertEmails(emails);
 
   return { count: emails.length, success: true };
+}
+
+async function getFullEmailContent(emailId) {
+  const { getEmailBody, getEmailAttachments } = require('../db');
+  const body = await getEmailBody(emailId);
+  const attachments = await getEmailAttachments(emailId);
+  return { body, attachments };
+}
+
+async function fetchCalendarEvents() {
+  try {
+    const auth = await getAuthenticatedClient();
+    const calendar = google.calendar({ version: 'v3', auth });
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const weekAhead = new Date(now.getTime() + 7 * 86400000);
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: weekAgo.toISOString(),
+      timeMax: weekAhead.toISOString(),
+      maxResults: 50,
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = (response.data.items || []).map(event => ({
+      id: event.id,
+      accountId: 'primary',
+      summary: event.summary || '',
+      description: event.description || '',
+      startTime: new Date(event.start?.dateTime || event.start?.date).getTime(),
+      endTime: new Date(event.end?.dateTime || event.end?.date).getTime(),
+      eventType: event.eventType || 'default',
+      emailCount: 0,
+    }));
+
+    const { saveCalendarEvents } = require('../db');
+    await saveCalendarEvents(events);
+    return { count: events.length, success: true };
+  } catch (err) {
+    return { count: 0, success: false, error: err.message };
+  }
+}
+
+async function fetchEmailById(emailId) {
+  try {
+    const auth = await getAuthenticatedClient();
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const msg = await gmail.users.messages.get({
+      userId: 'me',
+      id: emailId,
+      format: 'full',
+    });
+
+    const { saveEmailBody, saveAttachments } = require('../db');
+    const parts = msg.data.payload.parts || [];
+    let bodyText = '';
+    const attachments = [];
+
+    function extractParts(parts) {
+      for (const part of parts) {
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.mimeType === 'text/html' && part.body?.data && !bodyText) {
+          bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.filename && part.filename.length > 0) {
+          attachments.push({
+            filename: part.filename,
+            mimeType: part.mimeType,
+            size: part.body?.size || 0,
+            attachmentId: part.body?.attachmentId || '',
+          });
+        }
+        if (part.parts) extractParts(part.parts);
+      }
+    }
+    extractParts(parts);
+
+    if (msg.data.payload.body?.data && !bodyText) {
+      bodyText = Buffer.from(msg.data.payload.body.data, 'base64').toString('utf-8');
+    }
+
+    if (bodyText) {
+      await saveEmailBody(emailId, bodyText.substring(0, 100000), '');
+    }
+    if (attachments.length > 0) {
+      await saveAttachments(emailId, attachments);
+    }
+
+    return {
+      success: true,
+      body: bodyText.substring(0, 100000),
+      attachments,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 async function logout() {
@@ -547,4 +524,7 @@ module.exports = {
   isAuthenticated,
   logout,
   getLogoutUrl,
+  getFullEmailContent,
+  fetchCalendarEvents,
+  fetchEmailById,
 };
