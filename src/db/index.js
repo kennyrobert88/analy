@@ -28,7 +28,8 @@ async function initDb() {
           has_attachments INTEGER DEFAULT 0,
           attachment_count INTEGER DEFAULT 0,
           email_size INTEGER DEFAULT 0,
-          account_id TEXT DEFAULT 'primary'
+          account_id TEXT DEFAULT 'primary',
+          category TEXT
         )
       `);
 
@@ -148,6 +149,7 @@ async function initDb() {
       db.run("ALTER TABLE emails ADD COLUMN attachment_count INTEGER DEFAULT 0", () => {});
       db.run("ALTER TABLE emails ADD COLUMN email_size INTEGER DEFAULT 0", () => {});
       db.run("ALTER TABLE emails ADD COLUMN account_id TEXT DEFAULT 'primary'", () => {});
+      db.run("ALTER TABLE emails ADD COLUMN category TEXT", () => {});
     });
 
     db.on('open', () => resolve());
@@ -158,8 +160,8 @@ async function initDb() {
 async function insertEmail(email) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         email.id,
         email.threadId,
@@ -174,6 +176,7 @@ async function insertEmail(email) {
         email.attachmentCount || 0,
         email.emailSize || 0,
         email.accountId || 'primary',
+        email.category || null,
       ],
       function (err) {
         if (err) return reject(err);
@@ -188,8 +191,8 @@ async function insertEmails(emails) {
     db.serialize(() => {
       db.run('BEGIN TRANSACTION');
       const stmt = db.prepare(
-        `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT OR REPLACE INTO emails (id, thread_id, sender, recipients, subject, snippet, body, internal_date, labels, has_attachments, attachment_count, email_size, account_id, category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       );
 
       emails.forEach((email) => {
@@ -208,6 +211,7 @@ async function insertEmails(emails) {
             email.attachmentCount || 0,
             email.emailSize || 0,
             email.accountId || 'primary',
+            email.category || null,
           ]
         );
       });
@@ -450,8 +454,8 @@ async function searchEmails(query, filters = {}) {
       params.push(filters.category);
     }
 
-    sql += ' ORDER BY internal_date DESC LIMIT ?';
-    params.push(filters.limit || 100);
+    sql += ' ORDER BY internal_date DESC LIMIT ? OFFSET ?';
+    params.push(filters.limit || 100, filters.offset || 0);
 
     db.all(sql, params, (err, rows) => {
       if (err) return reject(err);

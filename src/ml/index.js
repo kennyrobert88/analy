@@ -49,9 +49,17 @@ function saveTrainingData(filename, data) {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-let emailCategoryClassifier = createClassifierFromJson('email-categories.json');
-let intentClassifier = createClassifierFromJson('intents.json');
-let jobEmailClassifier = createClassifierFromJson('job-emails.json');
+let emailCategoryClassifier = null;
+let intentClassifier = null;
+let jobEmailClassifier = null;
+
+function ensureClassifiers() {
+  if (!emailCategoryClassifier) {
+    emailCategoryClassifier = createClassifierFromJson('email-categories.json');
+    intentClassifier = createClassifierFromJson('intents.json');
+    jobEmailClassifier = createClassifierFromJson('job-emails.json');
+  }
+}
 
 function reloadAllClassifiers() {
   emailCategoryClassifier = retrainClassifier('email-categories.json');
@@ -59,7 +67,12 @@ function reloadAllClassifiers() {
   jobEmailClassifier = retrainClassifier('job-emails.json');
 }
 
+function initClassifiers() {
+  ensureClassifiers();
+}
+
 function classifyEmailCategory(subject, sender) {
+  ensureClassifiers();
   const text = `${subject || ''} ${sender || ''}`.toLowerCase().replace(/<[^>]+>/g, ' ').trim();
   if (!text) return { category: 'other', confidence: 0, scores: {} };
 
@@ -76,6 +89,7 @@ function classifyEmailCategory(subject, sender) {
 }
 
 function classifyIntent(prompt) {
+  ensureClassifiers();
   const text = (prompt || '').toLowerCase().trim();
   if (!text) return { intent: 'general', confidence: 0, scores: {} };
 
@@ -98,6 +112,7 @@ function classifyIntent(prompt) {
 }
 
 function classifyJobEmail(subject, sender, snippet) {
+  ensureClassifiers();
   const text = `${subject || ''} ${sender || ''} ${snippet || ''}`.toLowerCase().replace(/<[^>]+>/g, ' ').trim();
   if (!text) return null;
 
@@ -160,6 +175,7 @@ module.exports = {
   classifyJobEmail,
   classifyJobEmails,
   reloadAllClassifiers,
+  initClassifiers,
   loadTrainingData,
   saveTrainingData,
   retrainClassifier,

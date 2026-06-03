@@ -116,7 +116,7 @@ function registerIpcHandlers() {
   ipcMain.handle('submit-prompt', wrapHandler(async (_event, prompt) => {
     const db = getDb();
     const emails = await new Promise((resolve, reject) => {
-      db.all('SELECT subject, sender, snippet, labels, internalDate FROM emails LIMIT 50', (err, rows) => {
+      db.all('SELECT subject, sender, snippet, labels, internal_date FROM emails LIMIT 50', (err, rows) => {
         if (err) return reject(err);
         resolve(rows);
       });

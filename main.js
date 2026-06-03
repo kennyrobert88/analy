@@ -5,6 +5,7 @@ const { initOAuth, fetchEmails, isAuthenticated } = require('./src/auth');
 const { createWindow, setupDockIcon, getMainWindow } = require('./src/main/window');
 const { registerIpcHandlers } = require('./src/main/ipc');
 const { generateProactiveInsights } = require('./src/ai');
+const { initClassifiers } = require('./src/ml');
 
 let autoRefreshInterval = null;
 
@@ -44,6 +45,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
   startAutoRefresh();
+  setImmediate(() => initClassifiers());
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

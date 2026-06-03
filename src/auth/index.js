@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 const http = require('http');
 const url = require('url');
-const { saveToken, getToken, clearTokens, getLatestEmailDate, insertEmails } = require('../db');
+const { saveToken, getToken, clearTokens, getLatestEmailDate, insertEmails, getEmailBody, getEmailAttachments, saveCalendarEvents, saveEmailBody, saveAttachments } = require('../db');
 
 let oauth2Client;
 let callbackServer;
@@ -233,10 +233,14 @@ async function getAuthUrl() {
   return authUrl;
 }
 
+const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
+
 async function startOAuthFlow(openUrl) {
   return new Promise(async (resolve, reject) => {
+    let timeoutId;
     try {
       await startCallbackServer(async (code, err) => {
+        clearTimeout(timeoutId);
         if (err) return reject(err);
         try {
           await handleCallback(code);
@@ -246,9 +250,18 @@ async function startOAuthFlow(openUrl) {
         }
       });
 
+      timeoutId = setTimeout(() => {
+        if (callbackServer) {
+          callbackServer.close();
+          callbackServer = null;
+        }
+        reject(new Error('OAuth flow timed out — user did not complete authentication'));
+      }, AUTH_TIMEOUT_MS);
+
       const authUrl = await getAuthUrl();
       await openUrl(authUrl);
     } catch (err) {
+      clearTimeout(timeoutId);
       reject(err);
     }
   });
@@ -355,36 +368,41 @@ async function fetchEmails(maxResults = 100, incremental = true) {
     return { count: 0, success: true, message: 'No new emails to fetch' };
   }
 
-  const emails = [];
+  const CONCURRENCY = 10;
+  const emailResults = [];
 
-  for (const message of allMessages) {
-    let msg;
-    try {
-      msg = await gmail.users.messages.get({
-        userId: 'me',
-        id: message.id,
-        format: 'metadata',
-        metadataHeaders: ['From', 'To', 'Subject', 'Date'],
-      });
-    } catch (err) {
-      if (err.code === 404 || err.message?.includes('not found')) {
-        continue;
+  for (let i = 0; i < allMessages.length; i += CONCURRENCY) {
+    const batch = allMessages.slice(i, i + CONCURRENCY);
+    const settled = await Promise.allSettled(
+      batch.map(message =>
+        gmail.users.messages.get({
+          userId: 'me',
+          id: message.id,
+          format: 'metadata',
+          metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+        })
+      )
+    );
+    for (const result of settled) {
+      if (result.status === 'rejected') {
+        const err = result.reason;
+        if (err.code === 404 || err.message?.includes('not found')) continue;
+        throw err;
       }
-      throw err;
+      emailResults.push(result.value);
     }
+  }
 
+  const emails = emailResults.map(msg => {
     const headers = msg.data.payload.headers;
     const from = headers.find((h) => h.name === 'From')?.value || '';
     const to = headers.find((h) => h.name === 'To')?.value || '';
     const subject = headers.find((h) => h.name === 'Subject')?.value || '';
-    const date = headers.find((h) => h.name === 'Date')?.value || '';
 
     const hasAttachments = (msg.data.labelIds || []).includes('ATTACHMENTS') ||
       (msg.data.payload?.parts || []).some(p => p.filename && p.filename.length > 0);
 
-    const emailSize = msg.data.sizeEstimate || 0;
-
-    emails.push({
+    return {
       id: msg.data.id,
       threadId: msg.data.threadId,
       sender: from,
@@ -396,19 +414,17 @@ async function fetchEmails(maxResults = 100, incremental = true) {
       labels: msg.data.labelIds || [],
       hasAttachments,
       attachmentCount: 0,
-      emailSize,
+      emailSize: msg.data.sizeEstimate || 0,
       accountId: 'primary',
-    });
-  }
+    };
+  });
 
-  const { insertEmails } = require('../db');
   await insertEmails(emails);
 
   return { count: emails.length, success: true };
 }
 
 async function getFullEmailContent(emailId) {
-  const { getEmailBody, getEmailAttachments } = require('../db');
   const body = await getEmailBody(emailId);
   const attachments = await getEmailAttachments(emailId);
   return { body, attachments };
@@ -442,7 +458,6 @@ async function fetchCalendarEvents() {
       emailCount: 0,
     }));
 
-    const { saveCalendarEvents } = require('../db');
     await saveCalendarEvents(events);
     return { count: events.length, success: true };
   } catch (err) {
@@ -461,7 +476,6 @@ async function fetchEmailById(emailId) {
       format: 'full',
     });
 
-    const { saveEmailBody, saveAttachments } = require('../db');
     const parts = msg.data.payload.parts || [];
     let bodyText = '';
     const attachments = [];
