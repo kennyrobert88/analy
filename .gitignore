@@ -1,6 +1,15 @@
 node_modules/
 .env
+.env.production
 *.db
 dist/
 build/
 AI.md
+
+# TLS certificates — never commit private keys
+deploy/ssl/*.key
+deploy/ssl/*.crt
+deploy/ssl/*.pem
+
+# SQLite data directory (server mode)
+data/
