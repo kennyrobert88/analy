@@ -6,12 +6,19 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "server": "node src/server/index.js",
+    "server:dev": "NODE_ENV=development node src/server/index.js",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "rebuild": "electron-rebuild --arch arm64",
     "postinstall": "electron-rebuild --arch arm64",
+    "docker:build": "docker build -f deploy/Dockerfile -t analy-api .",
+    "docker:up": "docker compose -f deploy/docker-compose.yml --env-file .env.production up -d",
+    "docker:down": "docker compose -f deploy/docker-compose.yml down",
+    "gen-key": "node -e \"console.log('ENCRYPTION_KEY='+require('crypto').randomBytes(32).toString('base64'))\"",
+    "gen-jwt-secret": "node -e \"console.log('JWT_SECRET='+require('crypto').randomBytes(48).toString('base64'))\"",
     "test": "node tests/ml.test.js",
     "test:ml": "node tests/ml.test.js",
     "test:ai": "node tests/ai.test.js"
@@ -90,6 +97,7 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "express": "^4.19.2",
     "googleapis": "^144.0.0",
     "natural": "^8.1.1",
     "sqlite3": "^5.1.7"

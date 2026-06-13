@@ -1,6 +1,18 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const { app } = require('electron');
+const { encrypt, decryptWithFallback } = require('../server/crypto');
+
+// Resolve the DB path from env (server mode) or Electron's userData (desktop mode).
+function resolveDbPath() {
+  if (process.env.DB_PATH) return process.env.DB_PATH;
+  try {
+    const { app } = require('electron');
+    return path.join(app.getPath('userData'), 'emails.db');
+  } catch {
+    // Non-Electron context (tests, server)
+    return path.join(process.cwd(), 'data', 'emails.db');
+  }
+}
 
 let db;
 
@@ -9,7 +21,7 @@ function getDb() {
 }
 
 async function initDb() {
-  const dbPath = path.join(app.getPath('userData'), 'emails.db');
+  const dbPath = resolveDbPath();
   db = new sqlite3.Database(dbPath);
 
   return new Promise((resolve, reject) => {
@@ -286,11 +298,25 @@ async function getEmailAttachments(emailId) {
 }
 
 async function saveToken(tokenData) {
+  // Encrypt sensitive token fields before persisting.
+  // expiry_date is not secret but we keep it plaintext for easy TTL queries.
+  let encAccessToken, encRefreshToken;
+  try {
+    encAccessToken  = encrypt(tokenData.access_token);
+    encRefreshToken = encrypt(tokenData.refresh_token);
+  } catch {
+    // ENCRYPTION_KEY not set (e.g. development without .env) — store plaintext
+    // and emit a warning so operators notice.
+    console.warn('[db] ENCRYPTION_KEY not set — storing OAuth tokens as plaintext');
+    encAccessToken  = tokenData.access_token;
+    encRefreshToken = tokenData.refresh_token;
+  }
+
   return new Promise((resolve, reject) => {
     db.run(
       `INSERT OR REPLACE INTO oauth_tokens (id, access_token, refresh_token, expiry_date)
        VALUES (1, ?, ?, ?)`,
-      [tokenData.access_token, tokenData.refresh_token, tokenData.expiry_date],
+      [encAccessToken, encRefreshToken, tokenData.expiry_date],
       function (err) {
         if (err) return reject(err);
         resolve();
@@ -303,7 +329,21 @@ async function getToken() {
   return new Promise((resolve, reject) => {
     db.get('SELECT * FROM oauth_tokens WHERE id = 1', (err, row) => {
       if (err) return reject(err);
-      resolve(row);
+      if (!row) return resolve(null);
+      try {
+        // decryptWithFallback handles: encrypted (current key), encrypted (prev key),
+        // or plaintext (legacy rows written before encryption was added).
+        resolve({
+          ...row,
+          access_token:  decryptWithFallback(row.access_token),
+          refresh_token: decryptWithFallback(row.refresh_token),
+        });
+      } catch (decErr) {
+        // Token is corrupted or key was rotated without a ENCRYPTION_KEY_PREV fallback.
+        // Return null so the caller treats this as unauthenticated.
+        console.error('[db] Failed to decrypt OAuth tokens — user will need to re-authenticate:', decErr.message);
+        resolve(null);
+      }
     });
   });
 }
